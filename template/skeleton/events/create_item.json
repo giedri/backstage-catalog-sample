@@ -1,0 +1,15 @@
+{
+  "version": "2.0",
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/v1/items"
+    },
+    "requestId": "local-test-001"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"name\": \"Sample Item\", \"description\": \"A sample item for testing\", \"owner_id\": \"OWNER-001\"}",
+  "isBase64Encoded": false
+}

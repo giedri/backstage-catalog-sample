@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.aws-sam/
+.pytest_cache/
+node_modules/
+dist/
+.venv/

@@ -1,0 +1,68 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+  annotations:
+    github.com/project-slug: acme-org/${{ values.name }}
+    backstage.io/techdocs-ref: dir:.
+    aws.amazon.com/region: ${{ values.region }}
+  tags:
+    - python
+    - serverless
+    - sam
+    - lambda
+    - dynamodb
+  links:
+    - url: https://${{ values.region }}.console.aws.amazon.com/cloudformation/home?region=${{ values.region }}#/stacks?filteringText=${{ values.name }}
+      title: CloudFormation Stack
+      icon: cloud
+    - url: https://${{ values.region }}.console.aws.amazon.com/cloudwatch/home?region=${{ values.region }}#logsV2:log-groups$3FlogGroupNameFilter$3D/aws/lambda/${{ values.name }}
+      title: CloudWatch Logs
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: production
+  owner: ${{ values.owner }}
+  system: ${{ values.name }}
+  providesApis:
+    - ${{ values.name }}-api
+  dependsOn:
+    - resource:${{ values.name }}-table
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.name }}-api
+  description: REST API for ${{ values.name }}.
+  tags:
+    - rest
+    - openapi
+spec:
+  type: openapi
+  lifecycle: production
+  owner: ${{ values.owner }}
+  system: ${{ values.name }}
+  definition:
+    $text: ./docs/openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.name }}-table
+  description: DynamoDB table for ${{ values.name }} data.
+  tags:
+    - dynamodb
+    - aws
+spec:
+  type: database
+  owner: ${{ values.owner }}
+  system: ${{ values.name }}
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+spec:
+  owner: ${{ values.owner }}

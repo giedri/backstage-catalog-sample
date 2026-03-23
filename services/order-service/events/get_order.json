@@ -1,0 +1,17 @@
+{
+  "version": "2.0",
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/v1/orders/550e8400-e29b-41d4-a716-446655440000"
+    },
+    "requestId": "local-test-002"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "pathParameters": {
+    "orderId": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "isBase64Encoded": false
+}

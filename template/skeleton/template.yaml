@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: ${{ values.description }}
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 256
+    Timeout: 30
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        STACK_NAME: !Ref AWS::StackName
+        TABLE_NAME: !Ref ItemTable
+    Architectures:
+      - arm64
+
+Resources:
+  # ---------- DynamoDB ----------
+  ItemTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-items"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Service
+          Value: !Ref AWS::StackName
+
+  # ---------- Lambda Functions ----------
+  CreateItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.create_item.lambda_handler
+      CodeUri: .
+      Description: Creates a new item
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/items
+            Method: POST
+
+  GetItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.get_item.lambda_handler
+      CodeUri: .
+      Description: Retrieves an item by ID
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/items/{itemId}
+            Method: GET
+
+  ListItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.list_items.lambda_handler
+      CodeUri: .
+      Description: Lists items with pagination
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/items
+            Method: GET
+
+  DeleteItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.delete_item.lambda_handler
+      CodeUri: .
+      Description: Deletes an item by ID
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/items/{itemId}
+            Method: DELETE
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.health.lambda_handler
+      CodeUri: .
+      Description: Health check endpoint
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  ItemTableName:
+    Description: DynamoDB table name
+    Value: !Ref ItemTable
+  ItemTableArn:
+    Description: DynamoDB table ARN
+    Value: !GetAtt ItemTable.Arn

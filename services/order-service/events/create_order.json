@@ -1,0 +1,15 @@
+{
+  "version": "2.0",
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/v1/orders"
+    },
+    "requestId": "local-test-001"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"customer_id\": \"CUST-001\", \"items\": [{\"product_id\": \"PROD-001\", \"product_name\": \"Widget\", \"quantity\": 2, \"unit_price\": 9.99}]}",
+  "isBase64Encoded": false
+}

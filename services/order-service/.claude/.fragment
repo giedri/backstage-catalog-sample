@@ -1,0 +1,4 @@
+fragment=sam-api
+version=sample
+hash=sample-hash
+tracked_files=.claude/settings.json,.claude/skills/sam-deploy/SKILL.md,.claude/skills/api-test/SKILL.md,CLAUDE.md

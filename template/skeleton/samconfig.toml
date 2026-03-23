@@ -1,0 +1,25 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "${{ values.name }}"
+resolve_s3 = true
+s3_prefix = "${{ values.name }}"
+region = "${{ values.region }}"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+
+[staging.deploy.parameters]
+stack_name = "${{ values.name }}-staging"
+resolve_s3 = true
+s3_prefix = "${{ values.name }}-staging"
+region = "${{ values.region }}"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+
+[prod.deploy.parameters]
+stack_name = "${{ values.name }}-prod"
+resolve_s3 = true
+s3_prefix = "${{ values.name }}-prod"
+region = "${{ values.region }}"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true

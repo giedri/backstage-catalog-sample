@@ -1,0 +1,25 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "order-service"
+resolve_s3 = true
+s3_prefix = "order-service"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+
+[staging.deploy.parameters]
+stack_name = "order-service-staging"
+resolve_s3 = true
+s3_prefix = "order-service-staging"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+
+[prod.deploy.parameters]
+stack_name = "order-service-prod"
+resolve_s3 = true
+s3_prefix = "order-service-prod"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true

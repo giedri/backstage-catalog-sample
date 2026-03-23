@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sam build*)",
+      "Bash(sam validate*)",
+      "Bash(sam local*)",
+      "Bash(sam deploy*)",
+      "Bash(sam delete*)",
+      "Bash(pytest*)",
+      "Bash(python -m pytest*)",
+      "Bash(python3 -m pytest*)",
+      "Bash(curl*)"
+    ]
+  }
+}

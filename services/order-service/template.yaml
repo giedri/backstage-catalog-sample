@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Order management microservice - Lambda/API Gateway/DynamoDB
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 256
+    Timeout: 30
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        STACK_NAME: !Ref AWS::StackName
+        TABLE_NAME: !Ref OrderTable
+    Architectures:
+      - arm64
+
+Resources:
+  # ---------- DynamoDB ----------
+  OrderTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-orders"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Service
+          Value: !Ref AWS::StackName
+
+  # ---------- Lambda Functions ----------
+  CreateOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.create_order.lambda_handler
+      CodeUri: .
+      Description: Creates a new order
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrderTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/orders
+            Method: POST
+
+  GetOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.get_order.lambda_handler
+      CodeUri: .
+      Description: Retrieves an order by ID
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrderTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/orders/{orderId}
+            Method: GET
+
+  ListOrdersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.list_orders.lambda_handler
+      CodeUri: .
+      Description: Lists orders with pagination
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrderTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/orders
+            Method: GET
+
+  UpdateOrderStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.update_order_status.lambda_handler
+      CodeUri: .
+      Description: Updates order status
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrderTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /v1/orders/{orderId}/status
+            Method: PATCH
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src.handlers.health.lambda_handler
+      CodeUri: .
+      Description: Health check endpoint
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  OrderTableName:
+    Description: DynamoDB table name
+    Value: !Ref OrderTable
+  OrderTableArn:
+    Description: DynamoDB table ARN
+    Value: !GetAtt OrderTable.Arn
