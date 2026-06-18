@@ -2,6 +2,14 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: ${{ values.description }}
 
+Parameters:
+  AuthIssuerUrl:
+    Type: String
+    Description: JWT token issuer URL (e.g. https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxx)
+  AuthAudience:
+    Type: CommaDelimitedList
+    Description: Accepted JWT audience values (e.g. app client IDs)
+
 Globals:
   Function:
     Runtime: python3.12
@@ -16,6 +24,21 @@ Globals:
       - arm64
 
 Resources:
+  # ---------- API Gateway ----------
+  ServerlessHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      Auth:
+        DefaultAuthorizer: JwtAuthorizer
+        Authorizers:
+          JwtAuthorizer:
+            AuthorizationScopes: []
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Ref AuthIssuerUrl
+              audience: !Ref AuthAudience
+
   # ---------- DynamoDB ----------
   ItemTable:
     Type: AWS::DynamoDB::Table
@@ -70,6 +93,7 @@ Resources:
           Properties:
             Path: /v1/items
             Method: POST
+            ApiId: !Ref ServerlessHttpApi
 
   GetItemFunction:
     Type: AWS::Serverless::Function
@@ -86,6 +110,7 @@ Resources:
           Properties:
             Path: /v1/items/{itemId}
             Method: GET
+            ApiId: !Ref ServerlessHttpApi
 
   ListItemsFunction:
     Type: AWS::Serverless::Function
@@ -102,6 +127,7 @@ Resources:
           Properties:
             Path: /v1/items
             Method: GET
+            ApiId: !Ref ServerlessHttpApi
 
   DeleteItemFunction:
     Type: AWS::Serverless::Function
@@ -118,6 +144,7 @@ Resources:
           Properties:
             Path: /v1/items/{itemId}
             Method: DELETE
+            ApiId: !Ref ServerlessHttpApi
 
   HealthFunction:
     Type: AWS::Serverless::Function
@@ -131,6 +158,9 @@ Resources:
           Properties:
             Path: /health
             Method: GET
+            ApiId: !Ref ServerlessHttpApi
+            Auth:
+              Authorizer: NONE
 
 Outputs:
   ApiUrl:

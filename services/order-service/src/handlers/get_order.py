@@ -3,7 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderNotFoundError, OrderService
-from src.utils.auth import AuthError, require_owner_or_admin
+from src.utils.auth import AuthError, get_user_claims
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -16,10 +16,15 @@ def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
         order_id = event["pathParameters"]["orderId"]
+        claims = get_user_claims(event)
+        user_id = claims["sub"]
+        is_admin_user = "admin" in claims["groups"]
+
         order = service.get_order(order_id)
 
-        # Verify the authenticated user owns this order (or is admin)
-        require_owner_or_admin(event, order.customer_id)
+        # Non-admin users can only see their own orders; return 404 to avoid info leak
+        if not is_admin_user and order.customer_id != user_id:
+            return error("NOT_FOUND", "Order not found", 404)
 
         return success(order.to_api_response())
 
