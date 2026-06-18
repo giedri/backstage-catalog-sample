@@ -15,6 +15,11 @@ class OrderNotFoundError(Exception):
     pass
 
 
+class OrderAuthorizationError(Exception):
+    """Raised when a conditional update fails due to customer_id mismatch."""
+    pass
+
+
 class OrderConflictError(Exception):
     pass
 
@@ -102,23 +107,60 @@ class OrderService:
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
         return orders, result_next_token
 
-    def update_order_status(self, order_id: str, new_status: str) -> Order:
+    def update_order_status(
+        self, order_id: str, new_status: str, customer_id: str | None = None
+    ) -> Order:
+        """Update the status of an order.
+
+        If customer_id is provided, the update uses a conditional expression
+        that validates both item existence AND customer_id ownership in a single
+        atomic DynamoDB operation. This eliminates the need for a separate
+        get_order call for authorization.
+
+        Raises:
+            OrderNotFoundError: If the order does not exist.
+            OrderAuthorizationError: If customer_id is provided and does not
+                match the order's customer_id.
+            ValueError: If new_status is not a valid OrderStatus.
+        """
         status = OrderStatus(new_status)
         now = datetime.now(timezone.utc).isoformat()
+
+        condition_expression = "attribute_exists(pk)"
+        expression_attr_values: dict = {
+            ":status": status.value,
+            ":now": now,
+        }
+
+        if customer_id is not None:
+            condition_expression += " AND customer_id = :expected_customer_id"
+            expression_attr_values[":expected_customer_id"] = customer_id
 
         try:
             response = self._table.update_item(
                 Key={"pk": f"ORDER#{order_id}", "sk": f"ORDER#{order_id}"},
                 UpdateExpression="SET order_status = :status, updated_at = :now",
-                ExpressionAttributeValues={
-                    ":status": status.value,
-                    ":now": now,
-                },
-                ConditionExpression="attribute_exists(pk)",
+                ExpressionAttributeValues=expression_attr_values,
+                ConditionExpression=condition_expression,
                 ReturnValues="ALL_NEW",
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                if customer_id is not None:
+                    # The condition failed - could be either not found or
+                    # customer_id mismatch. We need to distinguish:
+                    # check if the item exists at all.
+                    existing = self._table.get_item(
+                        Key={
+                            "pk": f"ORDER#{order_id}",
+                            "sk": f"ORDER#{order_id}",
+                        },
+                    ).get("Item")
+                    if existing:
+                        raise OrderAuthorizationError(
+                            f"Customer {customer_id} is not authorized to "
+                            f"update order {order_id}"
+                        )
                 raise OrderNotFoundError(f"Order {order_id} not found")
             raise
 

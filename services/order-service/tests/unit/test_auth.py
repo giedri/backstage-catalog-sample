@@ -42,6 +42,21 @@ class TestGetCustomerIdFromEvent:
         result = get_customer_id_from_event(event)
         assert result is None
 
+    def test_non_string_customer_id_integer(self):
+        event = make_api_event(claims={"customer_id": 12345})
+        result = get_customer_id_from_event(event)
+        assert result is None
+
+    def test_non_string_customer_id_list(self):
+        event = make_api_event(claims={"customer_id": ["CUST-001"]})
+        result = get_customer_id_from_event(event)
+        assert result is None
+
+    def test_non_string_customer_id_dict(self):
+        event = make_api_event(claims={"customer_id": {"id": "CUST-001"}})
+        result = get_customer_id_from_event(event)
+        assert result is None
+
 
 class TestAuthorizeCustomerAccess:
     def test_matching_customer_id(self):

@@ -2,7 +2,11 @@ import pytest
 from moto import mock_aws
 
 from src.models.order import OrderStatus
-from src.services.order_service import OrderConflictError, OrderNotFoundError
+from src.services.order_service import (
+    OrderAuthorizationError,
+    OrderConflictError,
+    OrderNotFoundError,
+)
 
 
 SAMPLE_ITEMS = [
@@ -76,9 +80,31 @@ class TestOrderService:
         assert updated.status == OrderStatus.CONFIRMED
         assert updated.updated_at > created.updated_at
 
+    def test_update_order_status_with_customer_id(self, order_service):
+        created = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        updated = order_service.update_order_status(
+            created.order_id, "CONFIRMED", customer_id="CUST-001"
+        )
+
+        assert updated.status == OrderStatus.CONFIRMED
+        assert updated.updated_at > created.updated_at
+
+    def test_update_order_status_wrong_customer_id(self, order_service):
+        created = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        with pytest.raises(OrderAuthorizationError):
+            order_service.update_order_status(
+                created.order_id, "CONFIRMED", customer_id="CUST-999"
+            )
+
     def test_update_order_status_not_found(self, order_service):
         with pytest.raises(OrderNotFoundError):
             order_service.update_order_status("nonexistent-id", "CONFIRMED")
+
+    def test_update_order_status_not_found_with_customer_id(self, order_service):
+        with pytest.raises(OrderNotFoundError):
+            order_service.update_order_status(
+                "nonexistent-id", "CONFIRMED", customer_id="CUST-001"
+            )
 
     def test_update_order_status_invalid(self, order_service):
         created = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)

@@ -273,6 +273,28 @@ class TestUpdateOrderStatusHandler:
 
         assert response["statusCode"] == 400
 
+    def test_update_order_status_forbidden_missing_claims(
+        self, dynamodb_table, order_service
+    ):
+        from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "CONFIRMED"},
+        )
+        response = lambda_handler(event, None)
+
+        # Returns 404 when claims are missing (fail-closed)
+        assert response["statusCode"] == 404
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "NOT_FOUND"
+
 
 @mock_aws
 class TestHealthHandler:

@@ -2,8 +2,8 @@ import json
 import logging
 import os
 
-from src.services.order_service import OrderNotFoundError, OrderService
-from src.utils.auth import authorize_customer_access
+from src.services.order_service import OrderAuthorizationError, OrderNotFoundError, OrderService
+from src.utils.auth import get_customer_id_from_event
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -22,20 +22,23 @@ def lambda_handler(event, context):
         if not new_status:
             return error("BAD_REQUEST", "status is required", 400)
 
-        # Fetch order first to verify ownership before updating
-        try:
-            order = service.get_order(order_id)
-        except OrderNotFoundError:
+        # Extract authenticated customer_id from JWT claims
+        customer_id = get_customer_id_from_event(event)
+        if not customer_id:
             return error("NOT_FOUND", "Order not found", 404)
 
-        is_authorized, _ = authorize_customer_access(event, order.customer_id)
-        if not is_authorized:
+        # Single atomic operation: update status with customer_id ownership check.
+        # This eliminates the separate get_order call for authorization.
+        try:
+            order = service.update_order_status(order_id, new_status, customer_id=customer_id)
+        except OrderNotFoundError:
+            return error("NOT_FOUND", "Order not found", 404)
+        except OrderAuthorizationError:
             # Return 404 instead of 403 to avoid leaking order existence.
             # An unauthorized caller should not be able to distinguish between
             # "order does not exist" and "order belongs to someone else."
             return error("NOT_FOUND", "Order not found", 404)
 
-        order = service.update_order_status(order_id, new_status)
         return success(order.to_api_response())
 
     except ValueError as e:

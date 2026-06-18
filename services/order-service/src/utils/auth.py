@@ -31,6 +31,9 @@ def get_customer_id_from_event(event: dict) -> str | None:
         if not customer_id:
             logger.warning("customer_id claim is missing or empty")
             return None
+        if not isinstance(customer_id, str):
+            logger.warning("customer_id claim is not a string: %s", type(customer_id).__name__)
+            return None
         return customer_id
     except (KeyError, TypeError) as e:
         logger.warning("Failed to extract customer_id from JWT claims: %s", e)
