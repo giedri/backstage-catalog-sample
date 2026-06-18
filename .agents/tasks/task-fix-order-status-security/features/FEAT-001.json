@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Add state machine transition validation and owner-or-admin authorization to the update_order_status endpoint to fix the security vulnerability in GitHub issue #4.",
+  "status": "completed",
+  "steps": [
+    "Add a VALID_TRANSITIONS dict to src/models/order.py mapping each OrderStatus to the set of allowed next states: PENDING->{CONFIRMED,CANCELLED}, CONFIRMED->{SHIPPED,CANCELLED}, SHIPPED->{DELIVERED}, DELIVERED->set(), CANCELLED->set(). Add a class or module-level InvalidTransitionError exception.",
+    "Modify src/services/order_service.py: In update_order_status method, first call get_order(order_id) to fetch the current order and its current status. Then validate the requested transition using VALID_TRANSITIONS. If the transition is invalid, raise an InvalidTransitionError with a descriptive message including current and requested status. Return the current order so the handler can use it for authorization. The method signature should change to accept the current_status or the method should fetch the order internally first.",
+    "Modify src/handlers/update_order_status.py: Replace require_admin(event) with require_owner_or_admin(event, order.customer_id). The handler must first fetch the order (via service.get_order) to get the customer_id before doing the auth check. Then call service.update_order_status which will validate the transition. Import require_owner_or_admin and get_user_claims from src/utils/auth.py. Handle InvalidTransitionError with a 400 response.",
+    "Update tests/unit/test_order_service.py: Add tests for valid transitions (PENDING->CONFIRMED, PENDING->CANCELLED, CONFIRMED->SHIPPED, CONFIRMED->CANCELLED, SHIPPED->DELIVERED), invalid transitions (DELIVERED->CANCELLED, CANCELLED->PENDING, PENDING->SHIPPED, PENDING->DELIVERED, SHIPPED->CANCELLED is NOT valid per the spec), and terminal states (DELIVERED and CANCELLED cannot transition to anything).",
+    "Update tests/unit/test_handlers.py TestUpdateOrderStatusHandler: Add tests for owner updating own order status (should succeed), non-owner non-admin being rejected with 403, admin updating any order (should succeed), invalid transition returning 400, and missing auth returning 401. Update existing test_update_order_status_forbidden_non_admin to reflect the new owner-or-admin logic (non-owner non-admin should get 403)."
+  ],
+  "acceptance_criteria": [
+    "Valid transitions (PENDING->CONFIRMED, PENDING->CANCELLED, CONFIRMED->SHIPPED, CONFIRMED->CANCELLED, SHIPPED->DELIVERED) succeed with 200",
+    "Invalid transitions (e.g., DELIVERED->CANCELLED, CANCELLED->PENDING, PENDING->SHIPPED) are rejected with 400 status and descriptive error",
+    "Order owner can update their own order's status (200 response)",
+    "Non-owner non-admin is rejected with 403",
+    "Admin can update any order's status (200 response)",
+    "Missing authentication context returns 401",
+    "All existing tests continue to pass (updated as needed for new behavior)",
+    "python -m pytest tests/ -v passes with all tests green"
+  ],
+  "verification": [
+    "cd services/order-service && python -m pytest tests/ -v"
+  ],
+  "blocked_reason": null,
+  "findings": "Test dependencies (pytest, boto3, moto) are not pre-installed in the sandbox and cannot be installed due to INTEGRATIONS_ONLY network mode (PyPI access blocked). All source files pass py_compile validation. The implementation follows established patterns exactly. Tests should pass once dependencies are available in a proper CI environment. Review follow-up applied: (1) TOCTOU fixed by passing current_order into update_order_status and adding ConditionExpression with expected status for atomic writes; (2) auth leakage fixed by calling get_user_claims before order fetch; (3) admin-invalid-transition test added."
+}

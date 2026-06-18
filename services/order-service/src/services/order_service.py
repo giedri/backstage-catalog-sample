@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-from src.models.order import Order, OrderItem, OrderStatus
+from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +102,21 @@ class OrderService:
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
         return orders, result_next_token
 
-    def update_order_status(self, order_id: str, new_status: str) -> Order:
+    def update_order_status(
+        self, order_id: str, new_status: str, current_order: Order | None = None
+    ) -> Order:
         status = OrderStatus(new_status)
+
+        # Use the already-fetched order if provided, avoiding a redundant read
+        if current_order is None:
+            current_order = self.get_order(order_id)
+        current_status = current_order.status
+
+        # Validate transition
+        allowed = VALID_TRANSITIONS.get(current_status, set())
+        if status not in allowed:
+            raise InvalidTransitionError(current_status, status)
+
         now = datetime.now(timezone.utc).isoformat()
 
         try:
@@ -113,13 +126,16 @@ class OrderService:
                 ExpressionAttributeValues={
                     ":status": status.value,
                     ":now": now,
+                    ":expected": current_status.value,
                 },
-                ConditionExpression="attribute_exists(pk)",
+                ConditionExpression="attribute_exists(pk) AND order_status = :expected",
                 ReturnValues="ALL_NEW",
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                raise OrderNotFoundError(f"Order {order_id} not found")
+                raise OrderConflictError(
+                    f"Order {order_id} status was modified concurrently"
+                )
             raise
 
         item = response["Attributes"]

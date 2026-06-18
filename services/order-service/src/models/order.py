@@ -17,6 +17,27 @@ class OrderStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+# Valid state transitions: maps each status to the set of allowed next statuses
+VALID_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
+    OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
+    OrderStatus.CONFIRMED: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+    OrderStatus.SHIPPED: {OrderStatus.DELIVERED},
+    OrderStatus.DELIVERED: set(),
+    OrderStatus.CANCELLED: set(),
+}
+
+
+class InvalidTransitionError(Exception):
+    """Raised when an order status transition is not allowed."""
+
+    def __init__(self, current_status: OrderStatus, requested_status: OrderStatus):
+        self.current_status = current_status
+        self.requested_status = requested_status
+        super().__init__(
+            f"Cannot transition from {current_status.value} to {requested_status.value}"
+        )
+
+
 @dataclass
 class OrderItem:
     product_id: str
