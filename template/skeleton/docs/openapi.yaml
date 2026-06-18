@@ -15,11 +15,15 @@ servers:
       region:
         default: ${{ values.region }}
 
+security:
+  - BearerAuth: []
+
 paths:
   /health:
     get:
       summary: Health check
       operationId: healthCheck
+      security: []
       responses:
         "200":
           description: Service is healthy
@@ -58,16 +62,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized - missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - caller cannot create items for another owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
     get:
-      summary: List items by owner
+      summary: List items for the authenticated owner
       operationId: listItems
       parameters:
-        - name: owner_id
-          in: query
-          required: true
-          schema:
-            type: string
         - name: limit
           in: query
           required: false
@@ -87,8 +98,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ItemList"
-        "400":
-          description: Missing owner_id
+        "401":
+          description: Unauthorized - missing or invalid JWT token
           content:
             application/json:
               schema:
@@ -111,8 +122,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Item"
+        "401":
+          description: Unauthorized - missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
-          description: Item not found
+          description: Item not found or caller does not own this item
           content:
             application/json:
               schema:
@@ -130,14 +147,27 @@ paths:
       responses:
         "204":
           description: Item deleted
+        "401":
+          description: Unauthorized - missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
-          description: Item not found
+          description: Item not found or caller does not own this item
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token issued by the configured OAuth2/OIDC provider
+
   schemas:
     CreateItemRequest:
       type: object

@@ -63,15 +63,28 @@ def item_service(dynamodb_table):
     return ItemService(table_name="test-items", dynamodb_resource=dynamodb)
 
 
+_NO_AUTH = object()
+
+
 def make_api_event(
     method: str = "GET",
     path: str = "/",
     body: dict | None = None,
     path_parameters: dict | None = None,
     query_string_parameters: dict | None = None,
+    claims: dict | object | None = None,
 ) -> dict:
-    """Build an API Gateway HTTP API v2 proxy event."""
-    return {
+    """Build an API Gateway HTTP API v2 proxy event.
+
+    Args:
+        claims: JWT claims dict to include in authorizer context.
+                Defaults to {'sub': 'OWNER-001'} for backward compatibility.
+                Pass _NO_AUTH to simulate a request with no authorizer context.
+    """
+    if claims is None:
+        claims = {"sub": "OWNER-001"}
+
+    event = {
         "version": "2.0",
         "requestContext": {
             "http": {
@@ -86,3 +99,8 @@ def make_api_event(
         "queryStringParameters": query_string_parameters,
         "isBase64Encoded": False,
     }
+
+    if claims is not _NO_AUTH:
+        event["requestContext"]["authorizer"] = {"jwt": {"claims": claims}}
+
+    return event

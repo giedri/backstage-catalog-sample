@@ -135,10 +135,8 @@ paths:
                 $ref: "#/components/schemas/Order"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
-          description: Order not found
+          description: Order not found or caller does not own this order
           content:
             application/json:
               schema:

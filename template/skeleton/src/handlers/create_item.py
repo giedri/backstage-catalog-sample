@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.item_service import ItemConflictError, ItemService
+from src.utils.auth import UnauthorizedError, get_caller_identity
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -22,9 +23,16 @@ def lambda_handler(event, context):
         if not name or not owner_id:
             return error("BAD_REQUEST", "name and owner_id are required", 400)
 
+        caller_id = get_caller_identity(event)
+        if caller_id != owner_id:
+            return error("FORBIDDEN", "Cannot create items for another owner", 403)
+
         item = service.create_item(name=name, description=description, owner_id=owner_id)
         return success(item.to_api_response(), 201)
 
+    except UnauthorizedError as e:
+        logger.warning("Unauthorized: %s", e)
+        return error("UNAUTHORIZED", str(e), 401)
     except ItemConflictError as e:
         logger.warning("Conflict: %s", e)
         return error("CONFLICT", str(e), 409)

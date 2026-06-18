@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.item_service import ItemNotFoundError, ItemService
+from src.utils.auth import UnauthorizedError, get_caller_identity
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -15,9 +16,17 @@ def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
         item_id = event["pathParameters"]["itemId"]
+        caller_id = get_caller_identity(event)
         item = service.get_item(item_id)
+
+        if item.owner_id != caller_id:
+            return error("NOT_FOUND", "Item not found", 404)
+
         return success(item.to_api_response())
 
+    except UnauthorizedError as e:
+        logger.warning("Unauthorized: %s", e)
+        return error("UNAUTHORIZED", str(e), 401)
     except ItemNotFoundError:
         return error("NOT_FOUND", "Item not found", 404)
     except KeyError as e:
