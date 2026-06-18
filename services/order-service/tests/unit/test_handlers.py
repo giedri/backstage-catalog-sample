@@ -362,6 +362,31 @@ class TestUpdateOrderStatusHandler:
         body = json.loads(response["body"])
         assert body["error"]["code"] == "NOT_FOUND"
 
+    def test_update_order_status_admin_invalid_transition(
+        self, dynamodb_table, order_service
+    ):
+        """Admin is still subject to transition state machine rules."""
+        from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+        # Order starts as PENDING; DELIVERED is not a valid transition from PENDING
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "DELIVERED"},
+            claims={"sub": "ADMIN-001", "cognito:groups": "admin"},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 400
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "INVALID_TRANSITION"
+        assert "PENDING" in body["error"]["message"]
+        assert "DELIVERED" in body["error"]["message"]
+
 
 @mock_aws
 class TestHealthHandler:

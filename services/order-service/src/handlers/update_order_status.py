@@ -3,8 +3,8 @@ import logging
 import os
 
 from src.models.order import InvalidTransitionError
-from src.services.order_service import OrderNotFoundError, OrderService
-from src.utils.auth import AuthError, require_owner_or_admin
+from src.services.order_service import OrderConflictError, OrderNotFoundError, OrderService
+from src.utils.auth import AuthError, get_user_claims, require_owner_or_admin
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -16,6 +16,10 @@ service = OrderService(table_name=os.environ.get("TABLE_NAME", "orders"))
 def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
+        # Validate authentication before any resource access to avoid
+        # leaking order existence to unauthenticated callers.
+        get_user_claims(event)
+
         order_id = event["pathParameters"]["orderId"]
         body = json.loads(event.get("body", "{}"))
         new_status = body.get("status")
@@ -23,19 +27,28 @@ def lambda_handler(event, context):
         if not new_status:
             return error("BAD_REQUEST", "status is required", 400)
 
-        # Fetch order first to get customer_id for auth check
+        # Fetch order to get customer_id for ownership check
         order = service.get_order(order_id)
 
         # Require owner or admin authorization
         require_owner_or_admin(event, order.customer_id)
 
-        updated_order = service.update_order_status(order_id, new_status)
+        # Pass the already-fetched order to avoid a redundant read (TOCTOU fix)
+        updated_order = service.update_order_status(
+            order_id, new_status, current_order=order
+        )
         return success(updated_order.to_api_response())
 
     except AuthError as e:
         return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
     except OrderNotFoundError:
         return error("NOT_FOUND", "Order not found", 404)
+    except OrderConflictError:
+        return error(
+            "CONFLICT",
+            "Order status was modified concurrently, please retry",
+            409,
+        )
     except InvalidTransitionError as e:
         return error("INVALID_TRANSITION", str(e), 400)
     except ValueError as e:
