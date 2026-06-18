@@ -134,6 +134,25 @@ class TestGetOrderHandler:
         body = json.loads(response["body"])
         assert body["error"]["code"] == "NOT_FOUND"
 
+    def test_get_order_forbidden_missing_claims(self, dynamodb_table, order_service):
+        from src.handlers.get_order import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="GET",
+            path=f"/v1/orders/{order.order_id}",
+            path_parameters={"orderId": order.order_id},
+        )
+        response = lambda_handler(event, None)
+
+        # Returns 404 when claims are missing (fail-closed)
+        assert response["statusCode"] == 404
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "NOT_FOUND"
+
 
 @mock_aws
 class TestListOrdersHandler:

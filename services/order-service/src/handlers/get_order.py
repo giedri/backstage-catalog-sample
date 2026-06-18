@@ -3,7 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderNotFoundError, OrderService
-from src.utils.auth import authorize_customer_access
+from src.utils.auth import get_customer_id_from_event
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -17,13 +17,19 @@ def lambda_handler(event, context):
     try:
         order_id = event["pathParameters"]["orderId"]
 
+        # Extract authenticated customer_id from JWT claims first.
+        # Fail-closed: if claims are missing or invalid, return 404 immediately
+        # so an unauthenticated caller cannot probe order existence.
+        customer_id = get_customer_id_from_event(event)
+        if not customer_id:
+            return error("NOT_FOUND", "Order not found", 404)
+
         try:
             order = service.get_order(order_id)
         except OrderNotFoundError:
             return error("NOT_FOUND", "Order not found", 404)
 
-        is_authorized, _ = authorize_customer_access(event, order.customer_id)
-        if not is_authorized:
+        if order.customer_id != customer_id:
             # Return 404 instead of 403 to avoid leaking order existence.
             # An unauthorized caller should not be able to distinguish between
             # "order does not exist" and "order belongs to someone else."
