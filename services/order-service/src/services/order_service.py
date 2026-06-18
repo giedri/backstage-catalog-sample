@@ -7,6 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
+from src.utils.pagination import decode_pagination_token, encode_pagination_token, InvalidPaginationTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,7 @@ class OrderService:
             "Limit": limit,
         }
         if next_token:
-            import json
-            import base64
-            kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(next_token))
+            kwargs["ExclusiveStartKey"] = decode_pagination_token(next_token, customer_id)
 
         response = self._table.query(**kwargs)
         items = response.get("Items", [])
@@ -93,11 +92,9 @@ class OrderService:
 
         result_next_token = None
         if "LastEvaluatedKey" in response:
-            import json
-            import base64
-            result_next_token = base64.b64encode(
-                json.dumps(response["LastEvaluatedKey"]).encode()
-            ).decode()
+            result_next_token = encode_pagination_token(
+                response["LastEvaluatedKey"], customer_id
+            )
 
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
         return orders, result_next_token

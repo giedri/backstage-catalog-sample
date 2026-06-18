@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Implement HMAC-signed, context-bound pagination tokens to replace the insecure plain base64 encoding of DynamoDB LastEvaluatedKey values. This prevents token forgery, cross-partition access, and exposure of internal DB key schema.",
+  "status": "in_progress",
+  "steps": [
+    "Create a new utility module at services/order-service/src/utils/pagination.py that provides two functions: encode_pagination_token(last_evaluated_key: dict, customer_id: str) -> str and decode_pagination_token(token: str, customer_id: str) -> dict. The implementation must: (a) Use Python stdlib hmac + hashlib (SHA-256) for signing; (b) Read the signing secret from os.environ['PAGINATION_SECRET']; (c) Create a payload dict containing the DynamoDB key and the customer_id as binding context; (d) JSON-encode the payload, then base64url-encode it; (e) Compute HMAC-SHA256 of the base64url-encoded payload using the secret; (f) Return a token in the format: base64url(payload).base64url(signature); (g) In decode_pagination_token: split on '.', verify the HMAC signature (using hmac.compare_digest for constant-time comparison), parse the payload JSON, validate that the customer_id in the payload matches the provided customer_id parameter, and return the DynamoDB key dict; (h) Raise a ValueError with a generic message ('Invalid pagination token') for any validation failure (bad format, bad signature, mismatched customer_id). Include a custom exception class InvalidPaginationTokenError(ValueError).",
+    "Update services/order-service/src/services/order_service.py list_orders method: (a) Remove the inline import and usage of base64/json for token encoding/decoding; (b) Import encode_pagination_token and decode_pagination_token from src.utils.pagination; (c) Import InvalidPaginationTokenError from src.utils.pagination; (d) When consuming next_token: call decode_pagination_token(next_token, customer_id) and use the returned dict as ExclusiveStartKey; (e) When producing the result token: call encode_pagination_token(response['LastEvaluatedKey'], customer_id); (f) Let InvalidPaginationTokenError propagate up (the handler will catch ValueError).",
+    "Update services/order-service/src/handlers/list_orders.py: The handler already catches ValueError and returns a 400 BAD_REQUEST error, so InvalidPaginationTokenError (a ValueError subclass) will be handled automatically. No code changes needed in the handler itself, but verify the error handling path is correct.",
+    "Update services/order-service/template.yaml: (a) Add a PAGINATION_SECRET environment variable to the Globals.Function.Environment.Variables section; (b) Use !Sub '{{resolve:secretsmanager:${AWS::StackName}-pagination-secret:SecretString}}' or a parameter with a default value for local development. For simplicity and since this is a dev/staging service, add a Parameters entry for PaginationSecret with NoEcho: true and a default of 'change-me-in-production', then reference it as !Ref PaginationSecret in the global env vars.",
+    "Create a new test file at services/order-service/tests/unit/test_pagination.py with comprehensive tests for the pagination utility: (a) Test that encode_pagination_token produces a token with exactly one '.' separator; (b) Test that decode_pagination_token successfully round-trips (encode then decode returns original key); (c) Test that a token with a tampered payload (modified base64 content) raises InvalidPaginationTokenError; (d) Test that a token with a tampered signature raises InvalidPaginationTokenError; (e) Test that a token created for customer_id 'CUST-001' fails validation when decoded with customer_id 'CUST-002' (cross-partition protection); (f) Test that a completely malformed token (no '.', empty string, random garbage) raises InvalidPaginationTokenError; (g) Test that the DynamoDB key structure is NOT exposed in the token in a trivially decodable way (the payload base64 includes customer_id binding). These tests must use only stdlib + pytest (no moto needed).",
+    "Update services/order-service/tests/conftest.py: Add os.environ['PAGINATION_SECRET'] = 'test-secret-key-for-unit-tests' alongside the other env var setups at module level.",
+    "Update existing pagination tests in services/order-service/tests/unit/test_order_service.py (test_list_orders_pagination): The test currently expects that a next_token from list_orders can be passed back to get the next page. This should continue to work since the token is now signed with the same customer_id used in both calls. No logic changes needed, but verify the test still passes conceptually with the new signing."
+  ],
+  "acceptance_criteria": [
+    "A new file src/utils/pagination.py exists with encode_pagination_token and decode_pagination_token functions that use HMAC-SHA256 signing",
+    "The pagination token includes the customer_id in its signed payload, binding it to the query context",
+    "Token verification uses hmac.compare_digest for constant-time comparison to prevent timing attacks",
+    "An InvalidPaginationTokenError is raised for any tampered, malformed, or context-mismatched token",
+    "The list_orders method in order_service.py uses the new pagination utility instead of plain base64",
+    "template.yaml includes a PAGINATION_SECRET environment variable available to all Lambda functions",
+    "conftest.py sets the PAGINATION_SECRET env var for tests",
+    "A comprehensive test file tests/unit/test_pagination.py exists covering token signing, verification, tampering detection, and cross-partition rejection",
+    "All test assertions are meaningful - they would fail if the HMAC signing were removed or bypassed"
+  ],
+  "verification": [
+    "Run pytest tests/unit/test_pagination.py -x -v from services/order-service/ to verify the new pagination token tests pass",
+    "Run pytest tests/unit/ -x -v from services/order-service/ to verify all existing tests still pass with the updated code"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

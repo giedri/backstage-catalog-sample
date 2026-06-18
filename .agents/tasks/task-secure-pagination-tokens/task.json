@@ -1,0 +1,7 @@
+{
+  "task_id": "task-secure-pagination-tokens",
+  "task_description": "Fix HIGH severity security vulnerability: Replace insecure plain base64 pagination tokens with HMAC-signed, context-bound tokens to prevent DynamoDB key forgery and cross-partition data access (GitHub issue #5).",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

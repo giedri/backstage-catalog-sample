@@ -12,6 +12,7 @@ Globals:
         LOG_LEVEL: INFO
         STACK_NAME: !Ref AWS::StackName
         TABLE_NAME: !Ref OrderTable
+        PAGINATION_SECRET: !Ref PaginationSecret
     Architectures:
       - arm64
 
@@ -20,6 +21,11 @@ Parameters:
     Type: String
     Default: order-service-auth
     Description: Cognito hosted UI domain prefix
+  PaginationSecret:
+    Type: String
+    NoEcho: true
+    Default: change-me-in-production
+    Description: HMAC secret used to sign pagination tokens
 
 Resources:
   # ---------- Cognito ----------
