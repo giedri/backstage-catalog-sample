@@ -32,5 +32,5 @@
     "Verify health endpoint has Auth: Authorizer: NONE override"
   ],
   "blocked_reason": null,
-  "findings": "All Python files pass py_compile syntax validation. Cannot run pytest due to INTEGRATIONS_ONLY network (no pip install). Template YAML verified with structural content checks. All handlers updated with authorization. Tests include both success and 403 forbidden scenarios."
+  "findings": "All Python files pass py_compile syntax validation. Cannot run pytest due to INTEGRATIONS_ONLY network (no pip install). Template YAML verified with structural content checks. All handlers updated with authorization. Tests include both success and 403 forbidden scenarios. Post-review fixes applied: get_order and update_order_status now return uniform 404 for both not-found and forbidden cases (eliminates order existence oracle). Custom customer_id claim requirement documented in auth.py and template.yaml."
 }
