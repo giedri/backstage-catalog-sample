@@ -24,5 +24,5 @@
     "cd services/order-service && python -m pytest tests/ -v"
   ],
   "blocked_reason": null,
-  "findings": "Test dependencies (pytest, boto3, moto) are not pre-installed in the sandbox and cannot be installed due to INTEGRATIONS_ONLY network mode (PyPI access blocked). All source files pass py_compile validation. The implementation follows established patterns exactly. Tests should pass once dependencies are available in a proper CI environment."
+  "findings": "Test dependencies (pytest, boto3, moto) are not pre-installed in the sandbox and cannot be installed due to INTEGRATIONS_ONLY network mode (PyPI access blocked). All source files pass py_compile validation. The implementation follows established patterns exactly. Tests should pass once dependencies are available in a proper CI environment. Review follow-up applied: (1) TOCTOU fixed by passing current_order into update_order_status and adding ConditionExpression with expected status for atomic writes; (2) auth leakage fixed by calling get_user_claims before order fetch; (3) admin-invalid-transition test added."
 }
