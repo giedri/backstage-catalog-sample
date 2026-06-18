@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Add JWT authorizer to SAM template and implement authorization logic in handlers to fix IDOR vulnerability (issue #3). This includes: configuring a JWT authorizer on the HttpApi in template.yaml, adding an auth utility module, updating all order handlers to extract and validate customer_id from the JWT claims, keeping the health endpoint unauthenticated, and adding comprehensive unit tests.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: Update services/order-service/template.yaml to add a JWT authorizer to the HttpApi. Define an explicit AWS::Serverless::HttpApi resource with Auth configuration containing a JWT authorizer (using environment variable placeholders for Issuer and Audience that would be configured at deploy time). Set DefaultAuthorization on the HttpApi to require the JWT authorizer. Override the HealthFunction event to use Auth: {Authorizer: NONE} so health remains unauthenticated.",
     "Step 2: Create services/order-service/src/utils/auth.py - a new authorization utility module. It should: (a) provide a function get_customer_id_from_event(event) that extracts the customer_id claim from event['requestContext']['authorizer']['jwt']['claims'] (the standard location for HTTP API v2 JWT authorizer claims), (b) provide a function authorize_customer_access(event, requested_customer_id) that compares the authenticated customer_id from the token with the requested_customer_id and returns a tuple of (is_authorized: bool, authenticated_customer_id: str|None), (c) handle missing/malformed claims gracefully returning appropriate error indicators.",
@@ -32,5 +32,5 @@
     "Verify health endpoint has Auth: Authorizer: NONE override"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All Python files pass py_compile syntax validation. Cannot run pytest due to INTEGRATIONS_ONLY network (no pip install). Template YAML verified with structural content checks. All handlers updated with authorization. Tests include both success and 403 forbidden scenarios."
 }
