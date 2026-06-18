@@ -2,7 +2,11 @@ import pytest
 from moto import mock_aws
 
 from src.models.order import OrderStatus
-from src.services.order_service import OrderConflictError, OrderNotFoundError
+from src.services.order_service import (
+    InvalidTransitionError,
+    OrderConflictError,
+    OrderNotFoundError,
+)
 
 
 SAMPLE_ITEMS = [
@@ -84,3 +88,76 @@ class TestOrderService:
         created = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
         with pytest.raises(ValueError):
             order_service.update_order_status(created.order_id, "INVALID")
+
+
+@mock_aws
+class TestOrderStatusTransitions:
+    """Tests for valid and invalid state machine transitions."""
+
+    def test_pending_to_confirmed(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        updated = order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        assert updated.status == OrderStatus.CONFIRMED
+
+    def test_pending_to_cancelled(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        updated = order_service.update_order_status(order.order_id, "CANCELLED", actor="admin-1")
+        assert updated.status == OrderStatus.CANCELLED
+
+    def test_confirmed_to_shipped(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        updated = order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+        assert updated.status == OrderStatus.SHIPPED
+
+    def test_confirmed_to_cancelled(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        updated = order_service.update_order_status(order.order_id, "CANCELLED", actor="admin-1")
+        assert updated.status == OrderStatus.CANCELLED
+
+    def test_shipped_to_delivered(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+        updated = order_service.update_order_status(order.order_id, "DELIVERED", actor="admin-1")
+        assert updated.status == OrderStatus.DELIVERED
+
+    def test_invalid_pending_to_shipped(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from PENDING to SHIPPED"):
+            order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+
+    def test_invalid_pending_to_delivered(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from PENDING to DELIVERED"):
+            order_service.update_order_status(order.order_id, "DELIVERED", actor="admin-1")
+
+    def test_invalid_delivered_to_cancelled(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "DELIVERED", actor="admin-1")
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from DELIVERED to CANCELLED"):
+            order_service.update_order_status(order.order_id, "CANCELLED", actor="admin-1")
+
+    def test_invalid_cancelled_to_pending(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CANCELLED", actor="admin-1")
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from CANCELLED to PENDING"):
+            order_service.update_order_status(order.order_id, "PENDING", actor="admin-1")
+
+    def test_invalid_shipped_to_confirmed(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from SHIPPED to CONFIRMED"):
+            order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+
+    def test_invalid_delivered_to_pending(self, order_service):
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+        order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "SHIPPED", actor="admin-1")
+        order_service.update_order_status(order.order_id, "DELIVERED", actor="admin-1")
+        with pytest.raises(InvalidTransitionError, match="Cannot transition from DELIVERED to PENDING"):
+            order_service.update_order_status(order.order_id, "PENDING", actor="admin-1")

@@ -1,0 +1,7 @@
+{
+  "task_id": "task-fix-order-status-security",
+  "task_description": "Fix security vulnerability in PATCH /v1/orders/{orderId}/status: add state transition validation in service layer, add identity logging, verify API Gateway auth, and add unit tests.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

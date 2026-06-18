@@ -290,6 +290,29 @@ class TestUpdateOrderStatusHandler:
         body = json.loads(response["body"])
         assert body["error"]["code"] == "UNAUTHORIZED"
 
+    def test_update_order_status_invalid_transition(
+        self, dynamodb_table, order_service
+    ):
+        from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "DELIVERED"},
+            claims={"sub": "ADMIN-001", "cognito:groups": "admin"},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 409
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "CONFLICT"
+        assert "Cannot transition from PENDING to DELIVERED" in body["error"]["message"]
+
 
 @mock_aws
 class TestHealthHandler:

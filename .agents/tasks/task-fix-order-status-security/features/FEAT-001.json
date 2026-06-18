@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Add state transition validation to the order service layer, add identity logging on status changes, verify API Gateway auth configuration, and add comprehensive unit tests for the new logic.",
+  "status": "in_progress",
+  "steps": [
+    "Step 1 - Define valid state transitions in src/models/order.py: Add a VALID_TRANSITIONS dict (or similar) to the OrderStatus area that defines which transitions are allowed. The state machine should be: PENDING->CONFIRMED, CONFIRMED->SHIPPED, SHIPPED->DELIVERED, PENDING->CANCELLED, CONFIRMED->CANCELLED. No backwards transitions (e.g., DELIVERED->anything, CANCELLED->anything are invalid).",
+    "Step 2 - Create an InvalidTransitionError exception class in src/services/order_service.py (alongside OrderNotFoundError and OrderConflictError).",
+    "Step 3 - Update OrderService.update_order_status() in src/services/order_service.py to: (a) First fetch the current order to get its current status, (b) Validate that the transition from current_status to new_status is permitted using the VALID_TRANSITIONS map, (c) If invalid, raise InvalidTransitionError with a message like 'Cannot transition from {current} to {new}', (d) Only then proceed with the DynamoDB update_item call, (e) Add a ConditionExpression to the update_item that also checks the current status hasn't changed (optimistic concurrency). Add an 'actor' parameter (optional string) and log the acting identity (e.g., logger.info('Order %s status changed from %s to %s by %s', order_id, current_status, new_status, actor)).",
+    "Step 4 - Update the handler src/handlers/update_order_status.py to: (a) Capture the claims returned by require_admin(event), (b) Pass the actor identity (claims['sub']) to the service layer's update_order_status method, (c) Catch InvalidTransitionError and return a 409 CONFLICT response with the error message.",
+    "Step 5 - Verify in template.yaml that the UpdateOrderStatusFunction's event does NOT have 'Auth: Authorizer: NONE'. Confirm it inherits the DefaultAuthorizer (CognitoAuthorizer). If it already does (which it does based on current code), no change needed - just confirm.",
+    "Step 6 - Add unit tests for state transition validation in tests/unit/test_order_service.py: Test all valid transitions succeed (PENDING->CONFIRMED, CONFIRMED->SHIPPED, SHIPPED->DELIVERED, PENDING->CANCELLED, CONFIRMED->CANCELLED). Test invalid transitions raise InvalidTransitionError (e.g., PENDING->SHIPPED, PENDING->DELIVERED, DELIVERED->CANCELLED, CANCELLED->PENDING, SHIPPED->CONFIRMED, etc.).",
+    "Step 7 - Add handler tests in tests/unit/test_handlers.py for: (a) Valid transition returns 200, (b) Invalid transition returns 409 with CONFLICT error code, (c) Confirm existing auth tests still work (unauthorized returns 401, non-admin returns 403).",
+    "Step 8 - Run pytest tests/unit/ -x -v and confirm all tests pass (both new and existing)."
+  ],
+  "acceptance_criteria": [
+    "VALID_TRANSITIONS map is defined in src/models/order.py with transitions: PENDING->{CONFIRMED, CANCELLED}, CONFIRMED->{SHIPPED, CANCELLED}, SHIPPED->{DELIVERED}, DELIVERED->{} (terminal), CANCELLED->{} (terminal)",
+    "InvalidTransitionError is raised for invalid transitions and returns 409 CONFLICT to the client",
+    "The service layer fetches current status before updating and validates the transition",
+    "The acting admin's identity (sub claim) is logged with each status change",
+    "API Gateway template confirms JWT auth is enforced on the PATCH /v1/orders/{orderId}/status route (DefaultAuthorizer inherited)",
+    "All existing tests continue to pass",
+    "New tests cover valid transitions, invalid transitions, and handler error responses for invalid transitions"
+  ],
+  "verification": [
+    "Run 'cd /projects/sandbox/backstage-catalog-sample/services/order-service && pytest tests/unit/ -x -v' and confirm all tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

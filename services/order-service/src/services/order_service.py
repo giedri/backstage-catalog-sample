@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-from src.models.order import Order, OrderItem, OrderStatus
+from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,10 @@ class OrderNotFoundError(Exception):
 
 
 class OrderConflictError(Exception):
+    pass
+
+
+class InvalidTransitionError(Exception):
     pass
 
 
@@ -102,8 +106,20 @@ class OrderService:
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
         return orders, result_next_token
 
-    def update_order_status(self, order_id: str, new_status: str) -> Order:
+    def update_order_status(self, order_id: str, new_status: str, actor: str | None = None) -> Order:
         status = OrderStatus(new_status)
+
+        # Fetch current order to validate transition
+        current_order = self.get_order(order_id)
+        current_status = current_order.status
+
+        # Validate the state transition
+        allowed = VALID_TRANSITIONS.get(current_status, set())
+        if status not in allowed:
+            raise InvalidTransitionError(
+                f"Cannot transition from {current_status.value} to {status.value}"
+            )
+
         now = datetime.now(timezone.utc).isoformat()
 
         try:
@@ -113,18 +129,27 @@ class OrderService:
                 ExpressionAttributeValues={
                     ":status": status.value,
                     ":now": now,
+                    ":expected_status": current_status.value,
                 },
-                ConditionExpression="attribute_exists(pk)",
+                ConditionExpression="attribute_exists(pk) AND order_status = :expected_status",
                 ReturnValues="ALL_NEW",
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                raise OrderNotFoundError(f"Order {order_id} not found")
+                raise OrderConflictError(
+                    f"Order {order_id} status was modified concurrently"
+                )
             raise
 
         item = response["Attributes"]
         if "order_status" in item:
             item["#status"] = item.pop("order_status")
 
-        logger.info("Updated order %s status to %s", order_id, status.value)
+        logger.info(
+            "Order %s status changed from %s to %s by %s",
+            order_id,
+            current_status.value,
+            status.value,
+            actor or "unknown",
+        )
         return Order.from_dynamodb_item(item)

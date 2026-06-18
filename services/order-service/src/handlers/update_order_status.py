@@ -2,7 +2,7 @@ import json
 import logging
 import os
 
-from src.services.order_service import OrderNotFoundError, OrderService
+from src.services.order_service import InvalidTransitionError, OrderNotFoundError, OrderService
 from src.utils.auth import AuthError, require_admin
 from src.utils.response import error, success
 
@@ -16,7 +16,7 @@ def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
         # Only admins can update order status
-        require_admin(event)
+        claims = require_admin(event)
 
         order_id = event["pathParameters"]["orderId"]
         body = json.loads(event.get("body", "{}"))
@@ -25,11 +25,13 @@ def lambda_handler(event, context):
         if not new_status:
             return error("BAD_REQUEST", "status is required", 400)
 
-        order = service.update_order_status(order_id, new_status)
+        order = service.update_order_status(order_id, new_status, actor=claims["sub"])
         return success(order.to_api_response())
 
     except AuthError as e:
         return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
+    except InvalidTransitionError as e:
+        return error("CONFLICT", str(e), 409)
     except OrderNotFoundError:
         return error("NOT_FOUND", "Order not found", 404)
     except ValueError as e:

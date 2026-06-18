@@ -17,6 +17,16 @@ class OrderStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+# Valid state machine transitions. Terminal states (DELIVERED, CANCELLED) have no outgoing transitions.
+VALID_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
+    OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
+    OrderStatus.CONFIRMED: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+    OrderStatus.SHIPPED: {OrderStatus.DELIVERED},
+    OrderStatus.DELIVERED: set(),
+    OrderStatus.CANCELLED: set(),
+}
+
+
 @dataclass
 class OrderItem:
     product_id: str

@@ -1,0 +1,26 @@
+{
+  "project_type": "Python 3.12 serverless microservice using AWS SAM (Lambda + API Gateway HTTP API v2 + DynamoDB)",
+  "language": "Python 3.12",
+  "build_system": "AWS SAM (template.yaml). No local build step required - just run tests.",
+  "test_framework": "pytest + moto (@mock_aws decorator). Tests in tests/unit/. conftest.py has make_api_event() helper, dynamodb_table fixture, order_service fixture.",
+  "build_command": "pip install -r requirements.txt -r requirements-dev.txt",
+  "test_command": "pytest tests/unit/ -x -v",
+  "verification_instructions": "1. Install deps: pip install -r requirements.txt -r requirements-dev.txt; 2. Run tests: pytest tests/unit/ -x -v; 3. Confirm all tests pass including new state transition tests.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/backstage-catalog-sample/services/order-service && pip install -r requirements.txt -r requirements-dev.txt",
+  "environment_constraints": "No AWS account available. No SAM CLI needed. Use moto for DynamoDB mocking in tests. No Docker build needed.",
+  "contribution_requirements": "Follow coding-conventions.md: thin handlers delegating to service layer, (str, Enum) pattern, module-level service instantiation. Follow testing-standards.md: @mock_aws class decorator, import handlers inside test methods, use make_api_event() helper.",
+  "key_patterns": "Handlers: thin, parse input + delegate to service + format response. Service layer: business logic + DynamoDB. Custom exceptions: OrderNotFoundError, OrderConflictError. Response helpers: success() and error() in src/utils/response.py. Auth: get_user_claims() returns {sub, email, groups}, require_admin() validates admin group. API errors use error codes: BAD_REQUEST, NOT_FOUND, CONFLICT, INTERNAL_ERROR.",
+  "relevant_files": [
+    "services/order-service/src/services/order_service.py",
+    "services/order-service/src/handlers/update_order_status.py",
+    "services/order-service/src/models/order.py",
+    "services/order-service/src/utils/auth.py",
+    "services/order-service/src/utils/response.py",
+    "services/order-service/template.yaml",
+    "services/order-service/tests/unit/test_order_service.py",
+    "services/order-service/tests/unit/test_handlers.py",
+    "services/order-service/tests/conftest.py"
+  ],
+  "directory_structure": "services/order-service/src/handlers/ - one handler per endpoint; services/order-service/src/services/ - business logic; services/order-service/src/models/ - dataclass models; services/order-service/src/utils/ - shared utilities; services/order-service/tests/unit/ - pytest unit tests"
+}
