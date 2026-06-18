@@ -1,7 +1,7 @@
 {
   "task_id": "task-fix-idor-auth",
   "task_description": "Fix IDOR vulnerability (issue #3): Add JWT authentication to SAM HttpApi and enforce object-level authorization in all order handlers so callers can only access their own customer's orders.",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001"],
   "blocked_reason": null,
   "verification": {
