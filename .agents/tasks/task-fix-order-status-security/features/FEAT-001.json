@@ -26,5 +26,5 @@
     "Run 'cd /projects/sandbox/backstage-catalog-sample/services/order-service && pytest tests/unit/ -x -v' and confirm all tests pass"
   ],
   "blocked_reason": null,
-  "findings": "All 54 tests pass. The sandbox has Python 3.9 instead of the target 3.12, so added 'from __future__ import annotations' to tests/conftest.py to fix pre-existing type hint syntax issue. The template.yaml already enforces JWT auth on the UpdateOrderStatus route (inherits DefaultAuthorizer: CognitoAuthorizer) - no change needed there. Used optimistic concurrency (ConditionExpression on current status) in the DynamoDB update to prevent race conditions."
+  "findings": "All 56 tests pass (54 original + 2 new concurrency tests). Review fixes applied: (1) handler now catches OrderConflictError and returns 409 CONFLICT, (2) added concurrency conflict tests at handler and service levels, (3) added WARNING log when actor is None. The sandbox has Python 3.9 instead of the target 3.12, so added 'from __future__ import annotations' to tests/conftest.py to fix pre-existing type hint syntax issue. The template.yaml already enforces JWT auth on the UpdateOrderStatus route (inherits DefaultAuthorizer: CognitoAuthorizer) - no change needed there."
 }
