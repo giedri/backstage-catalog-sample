@@ -1,0 +1,29 @@
+{
+  "project_type": "AWS SAM (Serverless Application Model) Python 3.12 Lambda service with API Gateway HttpApi and DynamoDB",
+  "language": "Python 3.12",
+  "build_system": "AWS SAM CLI (sam build, sam deploy). No Makefile. No Docker build for tests.",
+  "test_framework": "pytest with moto for DynamoDB mocking. Tests in tests/unit/. conftest.py provides fixtures: dynamodb_table, order_service, make_api_event helper.",
+  "build_command": "python3.12 -m py_compile on all source files (AST validation - no network for pip)",
+  "test_command": "pytest tests/ (requires boto3, moto, pytest installed - not available in sandbox due to network restrictions)",
+  "verification_instructions": "1. Validate Python syntax with py_compile on all modified/new .py files. 2. Validate template.yaml is well-formed YAML. 3. Review that tests are structurally correct.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "pip install -r requirements.txt -r requirements-dev.txt (NOT possible in this sandbox due to network restrictions)",
+  "environment_constraints": "INTEGRATIONS_ONLY network mode - cannot install packages from PyPI. Python 3.12 available via pyenv but no packages installed. Use AST/syntax validation (python3.12 -m py_compile) instead of running tests. Cannot run pytest.",
+  "contribution_requirements": "Follow existing handler pattern in CLAUDE.md. Keep handlers thin. Use service layer for business logic. Error responses follow {error: {code, message}} format. Use make_api_event helper in tests.",
+  "key_patterns": "1. Handlers import OrderService at module level. 2. make_api_event() in conftest.py builds HTTP API v2 proxy events with requestContext.http.method/path. 3. Response helpers: success(body, status) and error(code, message, status) in src/utils/response.py. 4. DynamoDB single-table with pk/sk and gsi1pk/gsi1sk. 5. API Gateway HTTP API v2 event format has requestContext.authorizer.jwt.claims for JWT authorizers.",
+  "relevant_files": [
+    "services/order-service/template.yaml",
+    "services/order-service/src/handlers/create_order.py",
+    "services/order-service/src/handlers/get_order.py",
+    "services/order-service/src/handlers/list_orders.py",
+    "services/order-service/src/handlers/update_order_status.py",
+    "services/order-service/src/handlers/health.py",
+    "services/order-service/src/utils/response.py",
+    "services/order-service/src/services/order_service.py",
+    "services/order-service/src/models/order.py",
+    "services/order-service/tests/conftest.py",
+    "services/order-service/tests/unit/test_handlers.py",
+    "services/order-service/tests/unit/test_order_service.py"
+  ],
+  "directory_structure": "services/order-service/ contains: template.yaml (SAM), src/ (handlers/, models/, services/, utils/), tests/ (unit/, conftest.py), events/, scripts/, docs/"
+}

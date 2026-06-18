@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderService
+from src.utils.auth import authorize_customer_access
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -19,6 +20,14 @@ def lambda_handler(event, context):
 
         if not customer_id:
             return error("BAD_REQUEST", "customer_id query parameter is required", 400)
+
+        is_authorized, _ = authorize_customer_access(event, customer_id)
+        if not is_authorized:
+            return error(
+                "FORBIDDEN",
+                "You are not authorized to access orders for this customer",
+                403,
+            )
 
         limit = min(int(params.get("limit", "20")), 100)
         next_token = params.get("next_token")

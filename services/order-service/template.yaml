@@ -2,6 +2,14 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Order management microservice - Lambda/API Gateway/DynamoDB
 
+Parameters:
+  JwtIssuer:
+    Type: String
+    Description: JWT token issuer URL (e.g., https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxx)
+  JwtAudience:
+    Type: CommaDelimitedList
+    Description: JWT audience values (e.g., client ID from identity provider)
+
 Globals:
   Function:
     Runtime: python3.12
@@ -16,6 +24,21 @@ Globals:
       - arm64
 
 Resources:
+  # ---------- API Gateway ----------
+  OrderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      Auth:
+        DefaultAuthorizer: JwtAuthorizer
+        Authorizers:
+          JwtAuthorizer:
+            AuthorizationScopes: []
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Ref JwtIssuer
+              audience: !Ref JwtAudience
+
   # ---------- DynamoDB ----------
   OrderTable:
     Type: AWS::DynamoDB::Table
@@ -68,6 +91,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders
             Method: POST
 
@@ -84,6 +108,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders/{orderId}
             Method: GET
 
@@ -100,6 +125,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders
             Method: GET
 
@@ -116,6 +142,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders/{orderId}/status
             Method: PATCH
 
@@ -129,13 +156,16 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /health
             Method: GET
+            Auth:
+              Authorizer: NONE
 
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com"
   OrderTableName:
     Description: DynamoDB table name
     Value: !Ref OrderTable

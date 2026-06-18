@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderNotFoundError, OrderService
+from src.utils.auth import authorize_customer_access
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -20,6 +21,17 @@ def lambda_handler(event, context):
 
         if not new_status:
             return error("BAD_REQUEST", "status is required", 400)
+
+        # Fetch order first to verify ownership before updating
+        order = service.get_order(order_id)
+
+        is_authorized, _ = authorize_customer_access(event, order.customer_id)
+        if not is_authorized:
+            return error(
+                "FORBIDDEN",
+                "You are not authorized to update this order",
+                403,
+            )
 
         order = service.update_order_status(order_id, new_status)
         return success(order.to_api_response())

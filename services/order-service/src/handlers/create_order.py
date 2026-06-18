@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderConflictError, OrderService
+from src.utils.auth import authorize_customer_access
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -20,6 +21,16 @@ def lambda_handler(event, context):
 
         if not customer_id or not items:
             return error("BAD_REQUEST", "customer_id and items are required", 400)
+
+        is_authorized, authenticated_customer_id = authorize_customer_access(
+            event, customer_id
+        )
+        if not is_authorized:
+            return error(
+                "FORBIDDEN",
+                "You are not authorized to create orders for this customer",
+                403,
+            )
 
         order = service.create_order(customer_id=customer_id, items=items)
         return success(order.to_api_response(), 201)

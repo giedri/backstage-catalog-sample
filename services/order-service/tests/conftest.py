@@ -69,9 +69,19 @@ def make_api_event(
     body: dict | None = None,
     path_parameters: dict | None = None,
     query_string_parameters: dict | None = None,
+    claims: dict | None = None,
 ) -> dict:
-    """Build an API Gateway HTTP API v2 proxy event."""
-    return {
+    """Build an API Gateway HTTP API v2 proxy event.
+
+    Args:
+        method: HTTP method.
+        path: Request path.
+        body: Request body dict (will be JSON-serialized).
+        path_parameters: Path parameters dict.
+        query_string_parameters: Query string parameters dict.
+        claims: JWT claims dict to include in requestContext.authorizer.jwt.claims.
+    """
+    event = {
         "version": "2.0",
         "requestContext": {
             "http": {
@@ -86,3 +96,12 @@ def make_api_event(
         "queryStringParameters": query_string_parameters,
         "isBase64Encoded": False,
     }
+
+    if claims is not None:
+        event["requestContext"]["authorizer"] = {
+            "jwt": {
+                "claims": claims,
+            }
+        }
+
+    return event

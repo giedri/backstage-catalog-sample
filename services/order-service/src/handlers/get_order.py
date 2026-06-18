@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderNotFoundError, OrderService
+from src.utils.auth import authorize_customer_access
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -16,10 +17,19 @@ def lambda_handler(event, context):
     try:
         order_id = event["pathParameters"]["orderId"]
         order = service.get_order(order_id)
+
+        is_authorized, _ = authorize_customer_access(event, order.customer_id)
+        if not is_authorized:
+            return error(
+                "FORBIDDEN",
+                "You are not authorized to access this order",
+                403,
+            )
+
         return success(order.to_api_response())
 
     except OrderNotFoundError:
-        return error("NOT_FOUND", f"Order not found", 404)
+        return error("NOT_FOUND", "Order not found", 404)
     except KeyError as e:
         logger.warning("Missing parameter: %s", e)
         return error("BAD_REQUEST", f"Missing parameter: {e}", 400)

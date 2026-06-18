@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Add JWT authorizer to SAM template and implement authorization logic in handlers to fix IDOR vulnerability (issue #3). This includes: configuring a JWT authorizer on the HttpApi in template.yaml, adding an auth utility module, updating all order handlers to extract and validate customer_id from the JWT claims, keeping the health endpoint unauthenticated, and adding comprehensive unit tests.",
+  "status": "in_progress",
+  "steps": [
+    "Step 1: Update services/order-service/template.yaml to add a JWT authorizer to the HttpApi. Define an explicit AWS::Serverless::HttpApi resource with Auth configuration containing a JWT authorizer (using environment variable placeholders for Issuer and Audience that would be configured at deploy time). Set DefaultAuthorization on the HttpApi to require the JWT authorizer. Override the HealthFunction event to use Auth: {Authorizer: NONE} so health remains unauthenticated.",
+    "Step 2: Create services/order-service/src/utils/auth.py - a new authorization utility module. It should: (a) provide a function get_customer_id_from_event(event) that extracts the customer_id claim from event['requestContext']['authorizer']['jwt']['claims'] (the standard location for HTTP API v2 JWT authorizer claims), (b) provide a function authorize_customer_access(event, requested_customer_id) that compares the authenticated customer_id from the token with the requested_customer_id and returns a tuple of (is_authorized: bool, authenticated_customer_id: str|None), (c) handle missing/malformed claims gracefully returning appropriate error indicators.",
+    "Step 3: Update services/order-service/src/handlers/create_order.py to import and use the auth utility. After parsing the request body, call authorize_customer_access(event, customer_id) to verify the authenticated user matches the customer_id in the request body. Return a 403 error using the existing error() helper with code 'FORBIDDEN' if the customer_id doesn't match the authenticated identity.",
+    "Step 4: Update services/order-service/src/handlers/get_order.py to import and use the auth utility. After fetching the order from the service, check that the order's customer_id matches the authenticated user's customer_id from the JWT claims. Return 403 FORBIDDEN if they don't match. This is object-level authorization since we need to look up the order first to know its customer_id.",
+    "Step 5: Update services/order-service/src/handlers/list_orders.py to import and use the auth utility. Validate that the customer_id query parameter matches the authenticated user's customer_id from the JWT claims. Return 403 FORBIDDEN if they don't match.",
+    "Step 6: Update services/order-service/src/handlers/update_order_status.py to import and use the auth utility. After fetching the order (to get its customer_id), validate that the authenticated user owns the order. Return 403 FORBIDDEN if they don't match. Note: this requires fetching the order first (via service.get_order) before updating to verify ownership.",
+    "Step 7: Update services/order-service/tests/conftest.py to enhance the make_api_event helper to accept an optional 'claims' parameter that populates requestContext.authorizer.jwt.claims in the generated event. Default claims should include a customer_id claim when provided.",
+    "Step 8: Update services/order-service/tests/unit/test_handlers.py to add authorization tests for each handler: (a) test that requests with matching customer_id claims succeed, (b) test that requests with mismatched customer_id claims return 403, (c) test that create_order with body customer_id different from token customer_id returns 403, (d) test that get_order returns 403 when the order belongs to a different customer, (e) test that list_orders returns 403 when querying another customer's orders, (f) test that update_order_status returns 403 for orders belonging to other customers. Update existing tests to include valid JWT claims in their events.",
+    "Step 9: Create services/order-service/tests/unit/test_auth.py to unit test the auth utility module directly: test get_customer_id_from_event with valid claims, missing claims, missing authorizer context. Test authorize_customer_access with matching and mismatched customer IDs."
+  ],
+  "acceptance_criteria": [
+    "template.yaml defines an explicit HttpApi resource with a JWT authorizer using placeholder env var values for Issuer and Audience",
+    "All order endpoints (POST /v1/orders, GET /v1/orders, GET /v1/orders/{orderId}, PATCH /v1/orders/{orderId}/status) require JWT authentication via the authorizer",
+    "GET /health endpoint remains unauthenticated (Auth: Authorizer: NONE)",
+    "Each order handler validates that the authenticated customer_id from JWT claims matches the customer_id being accessed",
+    "Mismatched customer_id returns HTTP 403 with error code FORBIDDEN",
+    "A new src/utils/auth.py module encapsulates the authorization logic",
+    "tests/conftest.py make_api_event supports a claims parameter for JWT claims",
+    "New unit tests cover both successful auth and 403 forbidden scenarios",
+    "All Python files pass syntax validation (python3.12 -m py_compile)"
+  ],
+  "verification": [
+    "Run python3.12 -m py_compile on all modified/new .py files to verify syntax",
+    "Run python3.12 -c 'import yaml; yaml.safe_load(open(\"services/order-service/template.yaml\"))' or python3.12 -c 'import ast' to verify template structure",
+    "Verify template.yaml contains HttpApi Auth configuration with JWT authorizer by checking file contents",
+    "Verify health endpoint has Auth: Authorizer: NONE override"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
