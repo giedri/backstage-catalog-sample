@@ -35,6 +35,11 @@ class TestEncodePaginationToken:
         assert "customer_id" in data
         assert "signature" in data
 
+    def test_raises_error_with_empty_secret(self):
+        """Encoding with an empty secret must raise InvalidPaginationTokenError."""
+        with pytest.raises(InvalidPaginationTokenError):
+            encode_pagination_token(SAMPLE_KEY, "CUST-001", "")
+
 
 class TestDecodePaginationToken:
     def test_round_trip(self):
@@ -104,3 +109,10 @@ class TestDecodePaginationToken:
 
         with pytest.raises(InvalidPaginationTokenError):
             decode_pagination_token(old_token, "CUST-001", SECRET)
+
+    def test_raises_error_with_empty_secret(self):
+        """Decoding with an empty secret must raise InvalidPaginationTokenError."""
+        token = encode_pagination_token(SAMPLE_KEY, "CUST-001", SECRET)
+
+        with pytest.raises(InvalidPaginationTokenError):
+            decode_pagination_token(token, "CUST-001", "")

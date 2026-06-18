@@ -47,7 +47,14 @@ def encode_pagination_token(
     - payload: base64-encoded JSON of the DynamoDB key
     - customer_id: the customer this token is bound to
     - signature: HMAC-SHA256 hex digest
+
+    Raises InvalidPaginationTokenError if secret is empty.
     """
+    if not secret:
+        raise InvalidPaginationTokenError(
+            "pagination secret is not configured"
+        )
+
     payload_bytes = json.dumps(last_evaluated_key).encode()
     payload_b64 = base64.b64encode(payload_bytes).decode()
 
@@ -65,9 +72,14 @@ def encode_pagination_token(
 def decode_pagination_token(token: str, customer_id: str, secret: str) -> dict:
     """Decode and verify a signed pagination token.
 
-    Raises InvalidPaginationTokenError if verification fails.
+    Raises InvalidPaginationTokenError if verification fails or secret is empty.
     Returns the deserialized DynamoDB ExclusiveStartKey dict on success.
     """
+    if not secret:
+        raise InvalidPaginationTokenError(
+            "pagination secret is not configured"
+        )
+
     if not token:
         raise InvalidPaginationTokenError("empty token")
 

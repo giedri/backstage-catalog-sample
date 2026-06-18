@@ -154,6 +154,16 @@ Resources:
         - Key: Service
           Value: !Ref AWS::StackName
 
+  # ---------- Secrets Manager ----------
+  PaginationSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}-pagination-secret"
+      Description: HMAC signing secret for pagination tokens
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
   # ---------- Lambda Functions ----------
   CreateOrderFunction:
     Type: AWS::Serverless::Function
