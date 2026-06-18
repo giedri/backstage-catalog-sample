@@ -24,7 +24,6 @@ Parameters:
   PaginationSecret:
     Type: String
     NoEcho: true
-    Default: change-me-in-production
     Description: HMAC secret used to sign pagination tokens
 
 Resources:

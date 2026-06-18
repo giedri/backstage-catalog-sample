@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
-from src.utils.pagination import decode_pagination_token, encode_pagination_token, InvalidPaginationTokenError
+from src.utils.pagination import decode_pagination_token, encode_pagination_token
 
 logger = logging.getLogger(__name__)
 
