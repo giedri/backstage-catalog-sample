@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Add state transition validation to the order service layer, add identity logging on status changes, verify API Gateway auth configuration, and add comprehensive unit tests for the new logic.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1 - Define valid state transitions in src/models/order.py: Add a VALID_TRANSITIONS dict (or similar) to the OrderStatus area that defines which transitions are allowed. The state machine should be: PENDING->CONFIRMED, CONFIRMED->SHIPPED, SHIPPED->DELIVERED, PENDING->CANCELLED, CONFIRMED->CANCELLED. No backwards transitions (e.g., DELIVERED->anything, CANCELLED->anything are invalid).",
     "Step 2 - Create an InvalidTransitionError exception class in src/services/order_service.py (alongside OrderNotFoundError and OrderConflictError).",
@@ -26,5 +26,5 @@
     "Run 'cd /projects/sandbox/backstage-catalog-sample/services/order-service && pytest tests/unit/ -x -v' and confirm all tests pass"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 54 tests pass. The sandbox has Python 3.9 instead of the target 3.12, so added 'from __future__ import annotations' to tests/conftest.py to fix pre-existing type hint syntax issue. The template.yaml already enforces JWT auth on the UpdateOrderStatus route (inherits DefaultAuthorizer: CognitoAuthorizer) - no change needed there. Used optimistic concurrency (ConditionExpression on current status) in the DynamoDB update to prevent race conditions."
 }

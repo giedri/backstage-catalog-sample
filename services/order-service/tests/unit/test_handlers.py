@@ -313,6 +313,43 @@ class TestUpdateOrderStatusHandler:
         assert body["error"]["code"] == "CONFLICT"
         assert "Cannot transition from PENDING to DELIVERED" in body["error"]["message"]
 
+    def test_update_order_status_concurrent_conflict(
+        self, dynamodb_table, order_service
+    ):
+        """Optimistic concurrency: if another writer changes status between read
+        and write, the handler returns 409 CONFLICT (not 500)."""
+        from unittest.mock import patch
+
+        from src.handlers.update_order_status import lambda_handler
+        from src.services.order_service import OrderConflictError
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "CONFIRMED"},
+            claims={"sub": "ADMIN-001", "cognito:groups": "admin"},
+        )
+
+        # Simulate a concurrent modification by having update_order_status raise
+        # OrderConflictError (as it would when the ConditionExpression fails)
+        with patch(
+            "src.handlers.update_order_status.service.update_order_status",
+            side_effect=OrderConflictError(
+                f"Order {order.order_id} status was modified concurrently"
+            ),
+        ):
+            response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 409
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "CONFLICT"
+        assert "modified concurrently" in body["error"]["message"]
+
 
 @mock_aws
 class TestHealthHandler:

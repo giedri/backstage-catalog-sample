@@ -152,4 +152,9 @@ class OrderService:
             status.value,
             actor or "unknown",
         )
+        if actor is None:
+            logger.warning(
+                "No actor identity provided for status change on order %s",
+                order_id,
+            )
         return Order.from_dynamodb_item(item)

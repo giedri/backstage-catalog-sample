@@ -2,7 +2,7 @@ import json
 import logging
 import os
 
-from src.services.order_service import InvalidTransitionError, OrderNotFoundError, OrderService
+from src.services.order_service import InvalidTransitionError, OrderConflictError, OrderNotFoundError, OrderService
 from src.utils.auth import AuthError, require_admin
 from src.utils.response import error, success
 
@@ -31,6 +31,8 @@ def lambda_handler(event, context):
     except AuthError as e:
         return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
     except InvalidTransitionError as e:
+        return error("CONFLICT", str(e), 409)
+    except OrderConflictError as e:
         return error("CONFLICT", str(e), 409)
     except OrderNotFoundError:
         return error("NOT_FOUND", "Order not found", 404)

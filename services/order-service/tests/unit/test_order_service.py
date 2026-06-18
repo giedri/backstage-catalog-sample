@@ -161,3 +161,28 @@ class TestOrderStatusTransitions:
         order_service.update_order_status(order.order_id, "DELIVERED", actor="admin-1")
         with pytest.raises(InvalidTransitionError, match="Cannot transition from DELIVERED to PENDING"):
             order_service.update_order_status(order.order_id, "PENDING", actor="admin-1")
+
+    def test_concurrent_modification_raises_conflict_error(self, order_service):
+        """When another writer changes the status between get_order and update_item,
+        the ConditionExpression fails and OrderConflictError is raised."""
+        from unittest.mock import patch
+
+        order = order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+
+        original_get_order = order_service.get_order
+
+        def get_order_then_modify(order_id):
+            """Return the current order, then immediately change its status
+            in DynamoDB so the subsequent conditional write fails."""
+            result = original_get_order(order_id)
+            # Simulate a concurrent writer updating the status directly
+            order_service._table.update_item(
+                Key={"pk": f"ORDER#{order_id}", "sk": f"ORDER#{order_id}"},
+                UpdateExpression="SET order_status = :s",
+                ExpressionAttributeValues={":s": "CONFIRMED"},
+            )
+            return result
+
+        with patch.object(order_service, "get_order", side_effect=get_order_then_modify):
+            with pytest.raises(OrderConflictError, match="modified concurrently"):
+                order_service.update_order_status(order.order_id, "CONFIRMED", actor="admin-1")
