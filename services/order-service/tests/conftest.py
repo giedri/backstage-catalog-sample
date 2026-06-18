@@ -7,6 +7,7 @@ from moto import mock_aws
 
 os.environ["TABLE_NAME"] = "test-orders"
 os.environ["LOG_LEVEL"] = "DEBUG"
+os.environ["PAGINATION_TOKEN_SECRET"] = "test-secret-key-for-pagination"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"

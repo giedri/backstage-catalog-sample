@@ -233,6 +233,23 @@ class TestListOrdersHandler:
         body = json.loads(response["body"])
         assert body["error"]["code"] == "UNAUTHORIZED"
 
+    def test_list_orders_invalid_token(self, dynamodb_table):
+        """A garbage next_token returns 400 BAD_REQUEST."""
+        from src.handlers.list_orders import lambda_handler
+
+        event = make_api_event(
+            method="GET",
+            path="/v1/orders",
+            query_string_parameters={"next_token": "not-a-valid-token!!!"},
+            claims={"sub": "CUST-001", "cognito:groups": ""},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 400
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "BAD_REQUEST"
+        assert "Invalid pagination token" in body["error"]["message"]
+
 
 @mock_aws
 class TestUpdateOrderStatusHandler:

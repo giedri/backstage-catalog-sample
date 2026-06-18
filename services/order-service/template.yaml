@@ -12,6 +12,7 @@ Globals:
         LOG_LEVEL: INFO
         STACK_NAME: !Ref AWS::StackName
         TABLE_NAME: !Ref OrderTable
+        PAGINATION_TOKEN_SECRET: !Sub '{{resolve:secretsmanager:${AWS::StackName}-pagination-secret:SecretString}}'
     Architectures:
       - arm64
 
