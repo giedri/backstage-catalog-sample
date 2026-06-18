@@ -3,6 +3,7 @@ import logging
 import os
 
 from src.services.order_service import OrderService
+from src.utils.auth import AuthError, get_user_claims
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -14,11 +15,17 @@ service = OrderService(table_name=os.environ.get("TABLE_NAME", "orders"))
 def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
-        params = event.get("queryStringParameters") or {}
-        customer_id = params.get("customer_id")
+        claims = get_user_claims(event)
+        user_id = claims["sub"]
+        is_admin = "admin" in claims["groups"]
 
-        if not customer_id:
-            return error("BAD_REQUEST", "customer_id query parameter is required", 400)
+        params = event.get("queryStringParameters") or {}
+
+        # Admins can query any customer's orders; regular users can only see their own
+        if is_admin and params.get("customer_id"):
+            customer_id = params["customer_id"]
+        else:
+            customer_id = user_id
 
         limit = min(int(params.get("limit", "20")), 100)
         next_token = params.get("next_token")
@@ -35,6 +42,8 @@ def lambda_handler(event, context):
 
         return success(response_body)
 
+    except AuthError as e:
+        return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
     except ValueError as e:
         logger.warning("Invalid parameter: %s", e)
         return error("BAD_REQUEST", f"Invalid parameter: {e}", 400)
