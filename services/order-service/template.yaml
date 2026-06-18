@@ -15,7 +15,106 @@ Globals:
     Architectures:
       - arm64
 
+Parameters:
+  CognitoDomain:
+    Type: String
+    Default: order-service-auth
+    Description: Cognito hosted UI domain prefix
+
 Resources:
+  # ---------- Cognito ----------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-user-pool"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+      UserPoolTags:
+        Service: !Ref AWS::StackName
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-client"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      AllowedOAuthFlowsUserPoolClientGrantTypes:
+        - authorization_code
+      CallbackURLs:
+        - http://localhost:3000/callback
+      LogoutURLs:
+        - http://localhost:3000/logout
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${CognitoDomain}-${AWS::AccountId}"
+      UserPoolId: !Ref UserPool
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admin
+      Description: Administrators with elevated privileges (e.g., update order status)
+      UserPoolId: !Ref UserPool
+
+  # ---------- API Gateway ----------
+  OrderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: "$default"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            AuthorizationScopes:
+              - openid
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              audience:
+                - !Ref UserPoolClient
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+
   # ---------- DynamoDB ----------
   OrderTable:
     Type: AWS::DynamoDB::Table
@@ -68,6 +167,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders
             Method: POST
 
@@ -84,6 +184,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders/{orderId}
             Method: GET
 
@@ -100,6 +201,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders
             Method: GET
 
@@ -116,6 +218,7 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /v1/orders/{orderId}/status
             Method: PATCH
 
@@ -129,16 +232,28 @@ Resources:
         Api:
           Type: HttpApi
           Properties:
+            ApiId: !Ref OrderApi
             Path: /health
             Method: GET
+            Auth:
+              Authorizer: NONE
 
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Value: !Sub "https://${OrderApi}.execute-api.${AWS::Region}.amazonaws.com"
   OrderTableName:
     Description: DynamoDB table name
     Value: !Ref OrderTable
   OrderTableArn:
     Description: DynamoDB table ARN
     Value: !GetAtt OrderTable.Arn
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+  UserPoolDomain:
+    Description: Cognito hosted UI domain
+    Value: !Sub "https://${CognitoDomain}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
