@@ -258,13 +258,43 @@ class TestUpdateOrderStatusHandler:
         body = json.loads(response["body"])
         assert body["status"] == "CONFIRMED"
 
-    def test_update_order_status_forbidden_non_admin(self, dynamodb_table):
+    def test_update_order_status_success_as_owner(
+        self, dynamodb_table, order_service
+    ):
+        """Order owner can update their own order's status."""
         from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
 
         event = make_api_event(
             method="PATCH",
-            path="/v1/orders/some-id/status",
-            path_parameters={"orderId": "some-id"},
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "CONFIRMED"},
+            claims={"sub": "CUST-001", "cognito:groups": ""},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 200
+        body = json.loads(response["body"])
+        assert body["status"] == "CONFIRMED"
+
+    def test_update_order_status_forbidden_non_owner_non_admin(
+        self, dynamodb_table, order_service
+    ):
+        """Non-owner non-admin user is rejected with 403."""
+        from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-002", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
             body={"status": "CONFIRMED"},
             claims={"sub": "CUST-001", "cognito:groups": ""},
         )
@@ -273,6 +303,31 @@ class TestUpdateOrderStatusHandler:
         assert response["statusCode"] == 403
         body = json.loads(response["body"])
         assert body["error"]["code"] == "FORBIDDEN"
+
+    def test_update_order_status_invalid_transition(
+        self, dynamodb_table, order_service
+    ):
+        """Invalid state transition returns 400 with INVALID_TRANSITION code."""
+        from src.handlers.update_order_status import lambda_handler
+
+        order = order_service.create_order(
+            customer_id="CUST-001", items=SAMPLE_ITEMS
+        )
+
+        event = make_api_event(
+            method="PATCH",
+            path=f"/v1/orders/{order.order_id}/status",
+            path_parameters={"orderId": order.order_id},
+            body={"status": "DELIVERED"},
+            claims={"sub": "CUST-001", "cognito:groups": ""},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 400
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "INVALID_TRANSITION"
+        assert "PENDING" in body["error"]["message"]
+        assert "DELIVERED" in body["error"]["message"]
 
     def test_update_order_status_unauthorized(self, dynamodb_table):
         from src.handlers.update_order_status import lambda_handler
@@ -289,6 +344,23 @@ class TestUpdateOrderStatusHandler:
         assert response["statusCode"] == 401
         body = json.loads(response["body"])
         assert body["error"]["code"] == "UNAUTHORIZED"
+
+    def test_update_order_status_order_not_found(self, dynamodb_table):
+        """Request for a non-existent order returns 404."""
+        from src.handlers.update_order_status import lambda_handler
+
+        event = make_api_event(
+            method="PATCH",
+            path="/v1/orders/nonexistent-id/status",
+            path_parameters={"orderId": "nonexistent-id"},
+            body={"status": "CONFIRMED"},
+            claims={"sub": "CUST-001", "cognito:groups": ""},
+        )
+        response = lambda_handler(event, None)
+
+        assert response["statusCode"] == 404
+        body = json.loads(response["body"])
+        assert body["error"]["code"] == "NOT_FOUND"
 
 
 @mock_aws

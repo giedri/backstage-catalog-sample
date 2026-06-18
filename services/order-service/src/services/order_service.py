@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-from src.models.order import Order, OrderItem, OrderStatus
+from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,16 @@ class OrderService:
 
     def update_order_status(self, order_id: str, new_status: str) -> Order:
         status = OrderStatus(new_status)
+
+        # Fetch current order to validate transition
+        current_order = self.get_order(order_id)
+        current_status = current_order.status
+
+        # Validate transition
+        allowed = VALID_TRANSITIONS.get(current_status, set())
+        if status not in allowed:
+            raise InvalidTransitionError(current_status, status)
+
         now = datetime.now(timezone.utc).isoformat()
 
         try:
