@@ -1,4 +1,13 @@
-"""Authorization utilities for extracting and validating JWT claims."""
+"""Authorization utilities for extracting and validating JWT claims.
+
+IMPORTANT: This module expects the identity provider (IdP) to include a custom
+"customer_id" claim in the JWT. This is NOT a standard OIDC claim. The IdP must
+be configured to map the internal customer identifier to this claim name.
+
+For example, in AWS Cognito this requires a pre-token-generation Lambda trigger
+or a custom attribute (custom:customer_id) mapped to the "customer_id" claim.
+Without this claim, all requests will be denied (fail-closed behavior).
+"""
 
 from __future__ import annotations
 

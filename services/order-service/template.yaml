@@ -9,6 +9,11 @@ Parameters:
   JwtAudience:
     Type: CommaDelimitedList
     Description: JWT audience values (e.g., client ID from identity provider)
+  # NOTE: The JWT issued by the identity provider MUST contain a custom
+  # "customer_id" claim. This is not a standard OIDC claim. Configure
+  # your IdP (e.g., Cognito pre-token-generation trigger or custom
+  # attribute mapping) to include this claim. Without it, all handler-level
+  # authorization checks will deny access (fail-closed).
 
 Globals:
   Function:

@@ -23,21 +23,21 @@ def lambda_handler(event, context):
             return error("BAD_REQUEST", "status is required", 400)
 
         # Fetch order first to verify ownership before updating
-        order = service.get_order(order_id)
+        try:
+            order = service.get_order(order_id)
+        except OrderNotFoundError:
+            return error("NOT_FOUND", "Order not found", 404)
 
         is_authorized, _ = authorize_customer_access(event, order.customer_id)
         if not is_authorized:
-            return error(
-                "FORBIDDEN",
-                "You are not authorized to update this order",
-                403,
-            )
+            # Return 404 instead of 403 to avoid leaking order existence.
+            # An unauthorized caller should not be able to distinguish between
+            # "order does not exist" and "order belongs to someone else."
+            return error("NOT_FOUND", "Order not found", 404)
 
         order = service.update_order_status(order_id, new_status)
         return success(order.to_api_response())
 
-    except OrderNotFoundError:
-        return error("NOT_FOUND", "Order not found", 404)
     except ValueError as e:
         logger.warning("Invalid status: %s", e)
         return error("BAD_REQUEST", f"Invalid status: {e}", 400)

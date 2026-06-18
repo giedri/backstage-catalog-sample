@@ -129,9 +129,10 @@ class TestGetOrderHandler:
         )
         response = lambda_handler(event, None)
 
-        assert response["statusCode"] == 403
+        # Returns 404 (not 403) to avoid leaking order existence
+        assert response["statusCode"] == 404
         body = json.loads(response["body"])
-        assert body["error"]["code"] == "FORBIDDEN"
+        assert body["error"]["code"] == "NOT_FOUND"
 
 
 @mock_aws
@@ -235,9 +236,10 @@ class TestUpdateOrderStatusHandler:
         )
         response = lambda_handler(event, None)
 
-        assert response["statusCode"] == 403
+        # Returns 404 (not 403) to avoid leaking order existence
+        assert response["statusCode"] == 404
         body = json.loads(response["body"])
-        assert body["error"]["code"] == "FORBIDDEN"
+        assert body["error"]["code"] == "NOT_FOUND"
 
     def test_update_order_status_not_found(self, dynamodb_table):
         from src.handlers.update_order_status import lambda_handler

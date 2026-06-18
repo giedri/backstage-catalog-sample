@@ -16,20 +16,21 @@ def lambda_handler(event, context):
     logger.debug("Event: %s", json.dumps(event))
     try:
         order_id = event["pathParameters"]["orderId"]
-        order = service.get_order(order_id)
+
+        try:
+            order = service.get_order(order_id)
+        except OrderNotFoundError:
+            return error("NOT_FOUND", "Order not found", 404)
 
         is_authorized, _ = authorize_customer_access(event, order.customer_id)
         if not is_authorized:
-            return error(
-                "FORBIDDEN",
-                "You are not authorized to access this order",
-                403,
-            )
+            # Return 404 instead of 403 to avoid leaking order existence.
+            # An unauthorized caller should not be able to distinguish between
+            # "order does not exist" and "order belongs to someone else."
+            return error("NOT_FOUND", "Order not found", 404)
 
         return success(order.to_api_response())
 
-    except OrderNotFoundError:
-        return error("NOT_FOUND", "Order not found", 404)
     except KeyError as e:
         logger.warning("Missing parameter: %s", e)
         return error("BAD_REQUEST", f"Missing parameter: {e}", 400)
