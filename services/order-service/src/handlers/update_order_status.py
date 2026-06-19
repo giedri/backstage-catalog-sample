@@ -31,11 +31,11 @@ def lambda_handler(event, context):
         order = service.get_order(order_id)
 
         # Require owner or admin authorization
-        require_owner_or_admin(event, order.customer_id)
+        claims = require_owner_or_admin(event, order.customer_id)
 
         # Pass the already-fetched order to avoid a redundant read (TOCTOU fix)
         updated_order = service.update_order_status(
-            order_id, new_status, current_order=order
+            order_id, new_status, current_order=order, actor=claims["sub"]
         )
         return success(updated_order.to_api_response())
 

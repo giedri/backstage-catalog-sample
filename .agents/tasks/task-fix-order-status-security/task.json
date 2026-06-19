@@ -1,0 +1,14 @@
+{
+  "task_id": "task-fix-order-status-security",
+  "task_description": "Fix security vulnerability in PATCH /v1/orders/{orderId}/status: add state transition validation in service layer, add identity logging, verify API Gateway auth, and add unit tests.",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All 56 tests pass including 11 state transition tests, 2 concurrency conflict tests, and handler tests. Review fixes addressed: OrderConflictError handler catch, concurrency tests, and actor WARNING log."
+  }
+}

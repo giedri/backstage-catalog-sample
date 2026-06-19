@@ -117,7 +117,7 @@ class OrderService:
         return orders, result_next_token
 
     def update_order_status(
-        self, order_id: str, new_status: str, current_order: Order | None = None
+        self, order_id: str, new_status: str, current_order: Order | None = None, actor: str | None = None
     ) -> Order:
         status = OrderStatus(new_status)
 
@@ -156,5 +156,16 @@ class OrderService:
         if "order_status" in item:
             item["#status"] = item.pop("order_status")
 
-        logger.info("Updated order %s status to %s", order_id, status.value)
+        logger.info(
+            "Order %s status changed from %s to %s by %s",
+            order_id,
+            current_status.value,
+            status.value,
+            actor or "unknown",
+        )
+        if actor is None:
+            logger.warning(
+                "No actor identity provided for status change on order %s",
+                order_id,
+            )
         return Order.from_dynamodb_item(item)
