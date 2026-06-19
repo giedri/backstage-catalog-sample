@@ -3,6 +3,7 @@ from moto import mock_aws
 
 from src.models.order import InvalidTransitionError, OrderStatus
 from src.services.order_service import OrderConflictError, OrderNotFoundError
+from src.utils.pagination import InvalidPaginationTokenError
 
 
 SAMPLE_ITEMS = [
@@ -167,3 +168,45 @@ class TestOrderService:
         for status in ["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED"]:
             with pytest.raises(InvalidTransitionError):
                 order_service.update_order_status(order.order_id, status)
+
+    def test_list_orders_rejects_tampered_token(self, order_service):
+        """A tampered pagination token is rejected."""
+        import base64
+        import json
+
+        # Create enough orders to get a next_token
+        for _ in range(3):
+            order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+
+        _, next_token = order_service.list_orders(customer_id="CUST-001", limit=2)
+        assert next_token is not None
+
+        # Tamper with the token: decode outer base64, modify payload, re-encode
+        token_json = base64.urlsafe_b64decode(next_token)
+        token_data = json.loads(token_json)
+        payload_bytes = bytearray(base64.b64decode(token_data["payload"]))
+        payload_bytes[0] ^= 0xFF
+        token_data["payload"] = base64.b64encode(bytes(payload_bytes)).decode()
+        tampered_token = base64.urlsafe_b64encode(
+            json.dumps(token_data).encode()
+        ).decode()
+
+        with pytest.raises(InvalidPaginationTokenError):
+            order_service.list_orders(
+                customer_id="CUST-001", next_token=tampered_token
+            )
+
+    def test_list_orders_rejects_cross_customer_token(self, order_service):
+        """A pagination token for one customer cannot be used by another."""
+        # Create orders for CUST-001
+        for _ in range(3):
+            order_service.create_order(customer_id="CUST-001", items=SAMPLE_ITEMS)
+
+        _, next_token = order_service.list_orders(customer_id="CUST-001", limit=2)
+        assert next_token is not None
+
+        # Try to use CUST-001's token with CUST-002
+        with pytest.raises(InvalidPaginationTokenError):
+            order_service.list_orders(
+                customer_id="CUST-002", next_token=next_token
+            )

@@ -4,6 +4,7 @@ import os
 
 from src.services.order_service import OrderService
 from src.utils.auth import AuthError, get_user_claims
+from src.utils.pagination import InvalidPaginationTokenError
 from src.utils.response import error, success
 
 logger = logging.getLogger()
@@ -44,6 +45,8 @@ def lambda_handler(event, context):
 
     except AuthError as e:
         return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
+    except InvalidPaginationTokenError:
+        return error("BAD_REQUEST", "Invalid pagination token", 400)
     except ValueError as e:
         logger.warning("Invalid parameter: %s", e)
         return error("BAD_REQUEST", f"Invalid parameter: {e}", 400)

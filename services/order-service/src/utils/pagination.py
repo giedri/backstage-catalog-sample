@@ -1,7 +1,7 @@
-"""Secure pagination token utilities.
+"""HMAC-signed pagination token utilities.
 
-Encodes and decodes HMAC-signed, context-bound pagination tokens to prevent
-token forgery, cross-partition access, and exposure of internal DynamoDB key schema.
+Tokens bind the DynamoDB LastEvaluatedKey to a specific customer_id using
+HMAC-SHA256 so that tokens cannot be forged or replayed across customers.
 """
 
 from __future__ import annotations
@@ -11,121 +11,105 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
 
 class InvalidPaginationTokenError(ValueError):
-    """Raised when a pagination token fails validation."""
+    """Raised when a pagination token fails validation.
 
-    def __init__(self, message: str = "Invalid pagination token"):
-        super().__init__(message)
+    Carries a generic user-facing message while logging the actual reason.
+    """
 
-
-def _get_secret() -> bytes:
-    """Retrieve the HMAC signing secret from environment."""
-    secret = os.environ.get("PAGINATION_SECRET")
-    if not secret:
-        raise RuntimeError("PAGINATION_SECRET environment variable is not set")
-    return secret.encode("utf-8")
+    def __init__(self, reason: str = ""):
+        self._reason = reason
+        if reason:
+            logger.warning("Invalid pagination token: %s", reason)
+        super().__init__("Invalid pagination token")
 
 
-def _base64url_encode(data: bytes) -> str:
-    """Base64url-encode bytes without padding."""
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+def _compute_signature(payload_b64: str, customer_id: str, secret: str) -> str:
+    """Compute HMAC-SHA256 over payload_b64 + '.' + customer_id."""
+    message = f"{payload_b64}.{customer_id}"
+    return hmac.new(
+        secret.encode(),
+        message.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
-def _base64url_decode(s: str) -> bytes:
-    """Base64url-decode a string, adding back padding as needed."""
-    padding = 4 - len(s) % 4
-    if padding != 4:
-        s += "=" * padding
-    return base64.urlsafe_b64decode(s)
-
-
-def encode_pagination_token(last_evaluated_key: dict, customer_id: str) -> str:
+def encode_pagination_token(
+    last_evaluated_key: dict, customer_id: str, secret: str
+) -> str:
     """Encode a DynamoDB LastEvaluatedKey into a signed pagination token.
 
-    The token binds the key to the customer_id so it cannot be reused
-    across different customer queries.
+    The token is a base64url-encoded JSON object containing:
+    - payload: base64-encoded JSON of the DynamoDB key
+    - customer_id: the customer this token is bound to
+    - signature: HMAC-SHA256 hex digest
 
-    Args:
-        last_evaluated_key: The DynamoDB LastEvaluatedKey dict.
-        customer_id: The customer ID to bind the token to.
-
-    Returns:
-        A signed token string in the format: base64url(payload).base64url(signature)
+    Raises InvalidPaginationTokenError if secret is empty.
     """
-    payload = {
-        "key": last_evaluated_key,
+    if not secret:
+        raise InvalidPaginationTokenError(
+            "pagination secret is not configured"
+        )
+
+    payload_bytes = json.dumps(last_evaluated_key).encode()
+    payload_b64 = base64.b64encode(payload_bytes).decode()
+
+    signature = _compute_signature(payload_b64, customer_id, secret)
+
+    token_data = {
+        "payload": payload_b64,
         "customer_id": customer_id,
+        "signature": signature,
     }
-    payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    encoded_payload = _base64url_encode(payload_bytes)
-
-    secret = _get_secret()
-    signature = hmac.new(secret, encoded_payload.encode("ascii"), hashlib.sha256).digest()
-    encoded_signature = _base64url_encode(signature)
-
-    return f"{encoded_payload}.{encoded_signature}"
+    token_json = json.dumps(token_data).encode()
+    return base64.urlsafe_b64encode(token_json).decode()
 
 
-def decode_pagination_token(token: str, customer_id: str) -> dict:
+def decode_pagination_token(token: str, customer_id: str, secret: str) -> dict:
     """Decode and verify a signed pagination token.
 
-    Validates the HMAC signature and checks that the customer_id in the token
-    matches the provided customer_id.
-
-    Args:
-        token: The pagination token string.
-        customer_id: The expected customer ID (must match the one in the token).
-
-    Returns:
-        The DynamoDB LastEvaluatedKey dict.
-
-    Raises:
-        InvalidPaginationTokenError: If the token is malformed, has an invalid
-            signature, or the customer_id does not match.
+    Raises InvalidPaginationTokenError if verification fails or secret is empty.
+    Returns the deserialized DynamoDB ExclusiveStartKey dict on success.
     """
-    if not token or not isinstance(token, str):
-        raise InvalidPaginationTokenError()
+    if not secret:
+        raise InvalidPaginationTokenError(
+            "pagination secret is not configured"
+        )
 
-    parts = token.split(".")
-    if len(parts) != 2:
-        raise InvalidPaginationTokenError()
+    if not token:
+        raise InvalidPaginationTokenError("empty token")
 
-    encoded_payload, encoded_signature = parts
-
-    # Verify signature
     try:
-        secret = _get_secret()
-        expected_signature = hmac.new(
-            secret, encoded_payload.encode("ascii"), hashlib.sha256
-        ).digest()
-        provided_signature = _base64url_decode(encoded_signature)
+        token_json = base64.urlsafe_b64decode(token)
+        token_data = json.loads(token_json)
     except Exception:
-        raise InvalidPaginationTokenError()
+        raise InvalidPaginationTokenError("malformed token encoding")
 
-    if not hmac.compare_digest(expected_signature, provided_signature):
-        raise InvalidPaginationTokenError()
+    if not isinstance(token_data, dict):
+        raise InvalidPaginationTokenError("token is not a JSON object")
 
-    # Decode and validate payload
+    required_keys = {"payload", "customer_id", "signature"}
+    if not required_keys.issubset(token_data.keys()):
+        raise InvalidPaginationTokenError("missing required token fields")
+
+    # Verify customer_id binding
+    if token_data["customer_id"] != customer_id:
+        raise InvalidPaginationTokenError("customer_id mismatch")
+
+    # Recompute signature and verify with timing-safe comparison
+    payload_b64 = token_data["payload"]
+    expected_signature = _compute_signature(payload_b64, customer_id, secret)
+
+    if not hmac.compare_digest(expected_signature, token_data["signature"]):
+        raise InvalidPaginationTokenError("signature verification failed")
+
+    # Decode the payload
     try:
-        payload_bytes = _base64url_decode(encoded_payload)
-        payload = json.loads(payload_bytes)
+        payload_bytes = base64.b64decode(payload_b64)
+        return json.loads(payload_bytes)
     except Exception:
-        raise InvalidPaginationTokenError()
-
-    if not isinstance(payload, dict):
-        raise InvalidPaginationTokenError()
-
-    token_customer_id = payload.get("customer_id")
-    if token_customer_id != customer_id:
-        raise InvalidPaginationTokenError()
-
-    key = payload.get("key")
-    if not isinstance(key, dict):
-        raise InvalidPaginationTokenError()
-
-    return key
+        raise InvalidPaginationTokenError("payload decode failed")

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
 
 from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
-from src.utils.pagination import decode_pagination_token, encode_pagination_token
+from src.utils.pagination import (
+    InvalidPaginationTokenError,
+    decode_pagination_token,
+    encode_pagination_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +26,19 @@ class OrderConflictError(Exception):
 
 
 class OrderService:
-    def __init__(self, table_name: str, dynamodb_resource=None):
+    def __init__(
+        self,
+        table_name: str,
+        dynamodb_resource=None,
+        pagination_secret: str | None = None,
+    ):
         self._dynamodb = dynamodb_resource or boto3.resource("dynamodb")
         self._table = self._dynamodb.Table(table_name)
+        self._pagination_secret = (
+            pagination_secret
+            if pagination_secret is not None
+            else os.environ.get("PAGINATION_TOKEN_SECRET", "")
+        )
 
     def create_order(self, customer_id: str, items: list[dict]) -> Order:
         order_items = [
@@ -80,7 +95,9 @@ class OrderService:
             "Limit": limit,
         }
         if next_token:
-            kwargs["ExclusiveStartKey"] = decode_pagination_token(next_token, customer_id)
+            kwargs["ExclusiveStartKey"] = decode_pagination_token(
+                next_token, customer_id, self._pagination_secret
+            )
 
         response = self._table.query(**kwargs)
         items = response.get("Items", [])
@@ -93,7 +110,7 @@ class OrderService:
         result_next_token = None
         if "LastEvaluatedKey" in response:
             result_next_token = encode_pagination_token(
-                response["LastEvaluatedKey"], customer_id
+                response["LastEvaluatedKey"], customer_id, self._pagination_secret
             )
 
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
