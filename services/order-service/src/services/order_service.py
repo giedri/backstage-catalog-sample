@@ -13,6 +13,7 @@ from src.utils.pagination import (
     decode_pagination_token,
     encode_pagination_token,
 )
+from src.utils.validation import validate_customer_id, validate_order_items
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class OrderService:
         )
 
     def create_order(self, customer_id: str, items: list[dict]) -> Order:
+        # Validate inputs before any persistence to prevent type-confusion bugs
+        validate_customer_id(customer_id)
+        validate_order_items(items)
+
         order_items = [
             OrderItem(
                 product_id=item["product_id"],
