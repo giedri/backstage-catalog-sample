@@ -29,6 +29,9 @@ def lambda_handler(event, context):
 
     except AuthError as e:
         return error(e.code, e.message, 401 if e.code == "UNAUTHORIZED" else 403)
+    except ValueError as e:
+        logger.warning("Validation error: %s", e)
+        return error("BAD_REQUEST", str(e), 400)
     except OrderConflictError as e:
         logger.warning("Conflict: %s", e)
         return error("CONFLICT", str(e), 409)
