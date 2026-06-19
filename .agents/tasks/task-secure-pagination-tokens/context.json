@@ -1,0 +1,25 @@
+{
+  "project_type": "Python 3.12 serverless microservice (AWS Lambda + API Gateway + DynamoDB)",
+  "language": "Python 3.12",
+  "build_system": "AWS SAM / CloudFormation. No local build step needed beyond pytest.",
+  "test_framework": "pytest with moto for AWS mocking. Tests in tests/unit/. conftest.py provides fixtures (dynamodb_table, order_service, make_api_event). @mock_aws class decorator pattern.",
+  "build_command": "No compile step. Validate with pytest.",
+  "test_command": "pytest tests/unit/ -x -v (run from services/order-service/)",
+  "verification_instructions": "1. Run pytest tests/unit/ -x -v from services/order-service/ directory. 2. Verify all existing and new tests pass. 3. Check that the PAGINATION_SECRET env var is configured in template.yaml for all functions that use pagination.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Environment is INTEGRATIONS_ONLY - cannot install from PyPI. Python 3.12 and pytest are pre-installed. boto3/moto are NOT available. Tests that require moto cannot be run in this sandbox. Focus on stdlib-only unit tests for the new pagination utility.",
+  "environment_constraints": "INTEGRATIONS_ONLY network - no external package installs possible. PyPI is blocked. Only Python stdlib modules and pre-installed pytest are available. hmac, hashlib, secrets, base64, json are all stdlib and available. boto3/moto-dependent tests cannot be run in sandbox but must still be correctly written.",
+  "contribution_requirements": "Follow coding-conventions.md: type hints on all functions, logging via stdlib, dataclass models. Follow testing-standards.md: use fixtures from conftest.py, @mock_aws decorator, SAMPLE_ITEMS at module level. Follow api-design.md: error responses use error() helper with code and message.",
+  "key_patterns": "1. Service layer pattern: constructor injection for DynamoDB, custom exceptions for domain errors. 2. Handler pattern: thin handlers that parse input, delegate to service, format response. Module-level service instantiation. 3. Utils are in src/utils/. 4. Tests import handlers inside test methods. 5. conftest.py sets env vars at module level. 6. Pagination tokens are currently plain base64 of DynamoDB LastEvaluatedKey JSON.",
+  "relevant_files": [
+    "services/order-service/src/services/order_service.py",
+    "services/order-service/src/handlers/list_orders.py",
+    "services/order-service/src/utils/response.py",
+    "services/order-service/src/utils/auth.py",
+    "services/order-service/template.yaml",
+    "services/order-service/tests/conftest.py",
+    "services/order-service/tests/unit/test_order_service.py",
+    "services/order-service/tests/unit/test_handlers.py"
+  ],
+  "directory_structure": "services/order-service/src/handlers/ - one Lambda handler per endpoint. services/order-service/src/models/ - dataclass models. services/order-service/src/services/ - business logic. services/order-service/src/utils/ - shared utilities. services/order-service/tests/unit/ - pytest unit tests."
+}
