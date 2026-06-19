@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
 
-from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS
+from src.models.order import Order, OrderItem, OrderStatus, VALID_TRANSITIONS, InvalidTransitionError
+from src.utils.pagination import (
+    InvalidPaginationTokenError,
+    decode_pagination_token,
+    encode_pagination_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +25,20 @@ class OrderConflictError(Exception):
     pass
 
 
-class InvalidTransitionError(Exception):
-    pass
-
-
 class OrderService:
-    def __init__(self, table_name: str, dynamodb_resource=None):
+    def __init__(
+        self,
+        table_name: str,
+        dynamodb_resource=None,
+        pagination_secret: str | None = None,
+    ):
         self._dynamodb = dynamodb_resource or boto3.resource("dynamodb")
         self._table = self._dynamodb.Table(table_name)
+        self._pagination_secret = (
+            pagination_secret
+            if pagination_secret is not None
+            else os.environ.get("PAGINATION_TOKEN_SECRET", "")
+        )
 
     def create_order(self, customer_id: str, items: list[dict]) -> Order:
         order_items = [
@@ -83,9 +95,9 @@ class OrderService:
             "Limit": limit,
         }
         if next_token:
-            import json
-            import base64
-            kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(next_token))
+            kwargs["ExclusiveStartKey"] = decode_pagination_token(
+                next_token, customer_id, self._pagination_secret
+            )
 
         response = self._table.query(**kwargs)
         items = response.get("Items", [])
@@ -97,28 +109,27 @@ class OrderService:
 
         result_next_token = None
         if "LastEvaluatedKey" in response:
-            import json
-            import base64
-            result_next_token = base64.b64encode(
-                json.dumps(response["LastEvaluatedKey"]).encode()
-            ).decode()
+            result_next_token = encode_pagination_token(
+                response["LastEvaluatedKey"], customer_id, self._pagination_secret
+            )
 
         logger.info("Listed %d orders for customer %s", len(orders), customer_id)
         return orders, result_next_token
 
-    def update_order_status(self, order_id: str, new_status: str, actor: str | None = None) -> Order:
+    def update_order_status(
+        self, order_id: str, new_status: str, current_order: Order | None = None, actor: str | None = None
+    ) -> Order:
         status = OrderStatus(new_status)
 
-        # Fetch current order to validate transition
-        current_order = self.get_order(order_id)
+        # Use the already-fetched order if provided, avoiding a redundant read
+        if current_order is None:
+            current_order = self.get_order(order_id)
         current_status = current_order.status
 
-        # Validate the state transition
+        # Validate transition
         allowed = VALID_TRANSITIONS.get(current_status, set())
         if status not in allowed:
-            raise InvalidTransitionError(
-                f"Cannot transition from {current_status.value} to {status.value}"
-            )
+            raise InvalidTransitionError(current_status, status)
 
         now = datetime.now(timezone.utc).isoformat()
 
@@ -129,9 +140,9 @@ class OrderService:
                 ExpressionAttributeValues={
                     ":status": status.value,
                     ":now": now,
-                    ":expected_status": current_status.value,
+                    ":expected": current_status.value,
                 },
-                ConditionExpression="attribute_exists(pk) AND order_status = :expected_status",
+                ConditionExpression="attribute_exists(pk) AND order_status = :expected",
                 ReturnValues="ALL_NEW",
             )
         except ClientError as e:

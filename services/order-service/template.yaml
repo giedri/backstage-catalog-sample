@@ -12,6 +12,7 @@ Globals:
         LOG_LEVEL: INFO
         STACK_NAME: !Ref AWS::StackName
         TABLE_NAME: !Ref OrderTable
+        PAGINATION_TOKEN_SECRET: !Sub '{{resolve:secretsmanager:${AWS::StackName}-pagination-secret:SecretString}}'
     Architectures:
       - arm64
 
@@ -152,6 +153,16 @@ Resources:
       Tags:
         - Key: Service
           Value: !Ref AWS::StackName
+
+  # ---------- Secrets Manager ----------
+  PaginationSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}-pagination-secret"
+      Description: HMAC signing secret for pagination tokens
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
 
   # ---------- Lambda Functions ----------
   CreateOrderFunction:

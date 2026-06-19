@@ -27,6 +27,17 @@ VALID_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
 }
 
 
+class InvalidTransitionError(Exception):
+    """Raised when an order status transition is not allowed."""
+
+    def __init__(self, current_status: OrderStatus, requested_status: OrderStatus):
+        self.current_status = current_status
+        self.requested_status = requested_status
+        super().__init__(
+            f"Cannot transition from {current_status.value} to {requested_status.value}"
+        )
+
+
 @dataclass
 class OrderItem:
     product_id: str
